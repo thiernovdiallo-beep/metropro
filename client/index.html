@@ -1,24 +1,53 @@
 <!doctype html>
 <html lang="en">
-
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title>Metro Pro | NYC to Columbus passenger vans</title>
     <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-    <title>Metro Pro</title>
-    <!-- THIS IS THE START OF A COMMENT BLOCK, BLOCK TO BE DELETED: Google Fonts here, example:
+      name="description"
+      content="Metro Pro runs scheduled passenger-van trips between New York City and Columbus, Ohio. Standard fare $150. Metro Pro Member $125. Ten seats per departure with digital QR tickets."
+    />
+    <meta name="keywords" content="Metro Pro, NYC Columbus van, intercity shuttle, passenger van, digital tickets" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Metro Pro | NYC to Columbus passenger vans" />
+    <meta
+      property="og:description"
+      content="Scheduled vans, assigned seats, member fares, and QR boarding between New York and Columbus."
+    />
+    <meta property="og:site_name" content="Metro Pro" />
+    <meta property="og:image" content="/logo.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Metro Pro | NYC to Columbus passenger vans" />
+    <meta
+      name="twitter:description"
+      content="Standard $150, Member $125. Ten seats. Digital tickets."
+    />
+    <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    THIS IS THE END OF A COMMENT BLOCK, BLOCK TO BE DELETED -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
   </head>
-
   <body>
+    <h1 className="sr-only" style="position:absolute;left:-9999px">
+      Metro Pro scheduled passenger vans: New York City to Columbus
+    </h1>
+    <h2 style="position:absolute;left:-9999px">Standard fare $150 · Member fare $125 · Membership $29.99/month</h2>
     <div id="root"></div>
+    <noscript>
+      <main>
+        <h1>Metro Pro</h1>
+        <p>
+          Interstate passenger-van transportation between New York City and Columbus, Ohio. Book a seat,
+          pay securely, and board with a digital QR ticket.
+        </p>
+        <p>Standard one-way fare $150. Metro Pro Member fare $125. Membership is $29.99 per month and is not unlimited travel.</p>
+      </main>
+    </noscript>
     <script src="/api/platform/config.js"></script>
     <script type="module" src="/src/main.tsx"></script>
-
   </body>
-
 </html>

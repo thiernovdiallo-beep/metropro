@@ -1,0 +1,30 @@
+{
+  "routes": [
+    { "path": "/", "title": "Book a trip" },
+    { "path": "/search", "title": "Departures" },
+    { "path": "/book", "title": "Passenger information" },
+    { "path": "/checkout", "title": "Checkout" },
+    { "path": "/confirmation", "title": "Booking confirmation" },
+    { "path": "/ticket/:token", "title": "Digital ticket" },
+    { "path": "/membership", "title": "Metro Pro Member" },
+    { "path": "/account", "title": "My trips" },
+    { "path": "/account/tickets", "title": "Digital tickets" },
+    { "path": "/account/membership", "title": "Membership" },
+    { "path": "/account/passengers", "title": "Saved passengers" },
+    { "path": "/account/payments", "title": "Payment methods" },
+    { "path": "/account/receipts", "title": "Receipts" },
+    { "path": "/account/notifications", "title": "Notifications" },
+    { "path": "/account/support", "title": "Customer support" },
+    { "path": "/account/settings", "title": "Profile settings" },
+    { "path": "/driver", "title": "Driver home" },
+    { "path": "/driver/trip/:id", "title": "Trip manifest" },
+    { "path": "/admin", "title": "Operations" },
+    { "path": "/admin/trips/:id", "title": "Trip detail" },
+    { "path": "/admin/dispatch", "title": "Dispatch board" },
+    { "path": "/admin/fleet", "title": "Fleet" },
+    { "path": "/admin/fleet/:id", "title": "Vehicle" },
+    { "path": "/admin/routes", "title": "Routes" },
+    { "path": "/admin/analytics", "title": "Analytics" },
+    { "path": "/admin/settings", "title": "Settings" }
+  ]
+}
