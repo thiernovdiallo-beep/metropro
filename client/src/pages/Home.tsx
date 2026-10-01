@@ -115,6 +115,15 @@ export default function Home() {
               and one front passenger seat at {money(front)}. A traveling member pays {money(member)}{" "}
               for their own regular seat.
             </p>
+            <figure className="mt-7 overflow-hidden rounded-2xl border border-white/80 bg-[#dcebed] shadow-[0_18px_40px_-28px_rgba(23,56,74,0.5)]">
+              <img
+                src="/manus-storage/async-images/IhzIbhghbmJ0tnSZuu0a46/image-1.webp"
+                alt="Illustrative passenger shuttle van on a tree-lined highway"
+                className="h-40 w-full object-cover object-[60%_50%] sm:h-44 lg:h-48"
+                loading="eager"
+                decoding="async"
+              />
+            </figure>
             <form id="member-sign-in" onSubmit={submitMemberSignIn} className="mt-8 grid min-w-0 scroll-mt-24 gap-3 rounded-2xl border border-[#badfdf] bg-white/90 p-5 shadow-sm sm:p-6">
               <h2 className="font-serif text-2xl">Member sign in</h2>
               <p className="text-sm leading-relaxed text-muted-foreground">Enter your email and password to access your trips, tickets and membership.</p>
