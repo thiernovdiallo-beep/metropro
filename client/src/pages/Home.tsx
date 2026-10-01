@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { isoDate, money } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { ArrowRightLeft, IdCard, Ticket } from "lucide-react";
+import { ArrowRightLeft, IdCard } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 
@@ -91,26 +91,26 @@ export default function Home() {
               and one front passenger seat at {money(front)}. A traveling member pays {money(member)}{" "}
               for their own regular seat.
             </p>
-            <div className="mt-8 grid min-w-0 gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-[#badfdf] bg-white/90 p-4 shadow-sm">
-                <IdCard className="h-6 w-6 text-primary" aria-hidden="true" />
-                <h2 className="mt-3 font-serif text-xl">Member profile</h2>
-                <p className="mt-1 min-h-12 text-xs leading-relaxed text-muted-foreground">Sign in, add your name, email, phone and ID photo, then join for $25/month.</p>
-                <Button type="button" className="mt-4 min-h-11 w-full" onClick={memberEntry}>
-                  {isAuthenticated ? "My member profile" : "Log in / Create profile"}
-                </Button>
+            <div className="mt-8 flex min-w-0 flex-col gap-4 rounded-2xl border border-[#badfdf] bg-white/85 p-5 shadow-sm xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <IdCard className="mt-0.5 h-6 w-6 shrink-0 text-primary" aria-hidden="true" />
+                <div className="min-w-0">
+                  <h2 className="font-serif text-xl">Interested in membership?</h2>
+                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                    Add your name, email, phone and ID photo to your profile, then join for $25/month.
+                  </p>
+                </div>
               </div>
-              <div className="rounded-2xl border border-[#c6e3eb] bg-white/90 p-4 shadow-sm">
-                <Ticket className="h-6 w-6 text-primary" aria-hidden="true" />
-                <h2 className="mt-3 font-serif text-xl">{isAuthenticated ? "Book a ticket" : "Book as a guest"}</h2>
-                <p className="mt-1 min-h-12 text-xs leading-relaxed text-muted-foreground">{isAuthenticated ? "Choose a departure and keep your trip in your account. No extra profile steps to buy a regular ticket." : "No sign-in or ID upload. Choose a departure and pay only for your ticket."}</p>
-                <a href="#trip-search" className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-primary/40 bg-white px-4 text-sm font-semibold text-primary hover:bg-secondary">{isAuthenticated ? "Find a departure" : "Book without signing in"}</a>
-              </div>
+              <Button type="button" variant="outline" className="min-h-11 w-full shrink-0 xl:w-auto" onClick={memberEntry}>
+                {isAuthenticated ? "My member profile" : "Log in / Create profile"}
+              </Button>
             </div>
           </div>
           <form id="trip-search" onSubmit={search} className="ticket-card min-w-0 scroll-mt-24 p-5 text-foreground sm:p-7">
-            <p className="mb-4 font-serif text-xl">Find your seat</p>
-            <p className="mb-5 text-xs text-muted-foreground">Search and book with or without a member account.</p>
+            <h2 className="font-serif text-xl">Plan your trip</h2>
+            <p className="mb-5 mt-2 text-sm text-muted-foreground">
+              {isAuthenticated ? "Choose your departure. Your booking will be saved to your account." : "Book as a guest—no account or ID photo needed."}
+            </p>
             <div className="mb-5 flex rounded-xl bg-secondary p-1 text-sm font-semibold">
               <button
                 type="button"
@@ -211,7 +211,7 @@ export default function Home() {
                 </div>
               ) : null}
               <Button type="submit" className="mt-1 h-12 w-full text-base" disabled={!origin || !dest || origin === dest}>
-                Find departures
+                See departures
               </Button>
             </div>
           </form>
