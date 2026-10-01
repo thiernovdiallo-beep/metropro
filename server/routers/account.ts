@@ -18,12 +18,15 @@ import {
   users,
 } from "../../drizzle/schema";
 import { getActiveMembership, getDb, writeAudit } from "../db";
+import { hasGuestAccess } from "../services/guest-access";
+import { approvedCheckoutOrigin } from "../services/checkout-origin";
 import { getDeparture, restoreSoldSeats } from "../services/inventory";
+import { getMemberProfileStatus, saveMemberIdPhoto } from "../services/member-profile";
 import { TEMPLATES, notify } from "../services/notifications";
 import { canSelfServeChange, getSettings } from "../services/policies";
 import { getStripe, stripeEnabled } from "../stripe/client";
 import { membershipPriceData } from "../stripe/products";
-import { protectedProcedure, router } from "../_core/trpc";
+import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 
 async function hydrateBooking(booking: typeof bookings.$inferSelect) {
   const db = await getDb();
@@ -62,7 +65,7 @@ async function tripCard(departureId: number) {
 export const accountRouter = router({
   overview: protectedProcedure.query(async ({ ctx }) => {
     const db = await getDb();
-    if (!db) return { upcoming: [], previous: [], membership: null, unread: 0 };
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
     const all = await db
       .select()
       .from(bookings)
@@ -82,13 +85,24 @@ export const accountRouter = router({
         (!h.outbound || h.outbound.departAt < now || h.booking.status !== "confirmed")
     );
     const membership = await getActiveMembership(ctx.user.id);
+    const memberProfile = await getMemberProfileStatus(ctx.user.id);
     const unreadRows = await db
       .select()
       .from(notifications)
       .where(and(eq(notifications.userId, ctx.user.id), eq(notifications.channel, "in_app")));
     const unread = unreadRows.filter(n => !n.readAt).length;
-    return { upcoming, previous, membership, unread };
+    return { upcoming, previous, membership, memberFareEligible: Boolean(membership && memberProfile.complete), unread };
   }),
+  memberProfile: protectedProcedure.query(async ({ ctx }) => getMemberProfileStatus(ctx.user.id)),
+  uploadMemberId: protectedProcedure
+    .input(z.object({ base64: z.string().min(1).max(2_800_000) }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await saveMemberIdPhoto(ctx.user.id, input.base64);
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "ID upload failed" });
+      }
+    }),
   tickets: protectedProcedure.query(async ({ ctx }) => {
     const db = await getDb();
     if (!db) return [];
@@ -100,8 +114,8 @@ export const accountRouter = router({
     }
     return result;
   }),
-  ticketByToken: protectedProcedure
-    .input(z.object({ token: z.string() }))
+  ticketByToken: publicProcedure
+    .input(z.object({ token: z.string().min(1).max(48), accessToken: z.string().max(128).optional() }))
     .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) return null;
@@ -109,8 +123,9 @@ export const accountRouter = router({
       if (!ticket) return null;
       const [booking] = await db.select().from(bookings).where(eq(bookings.id, ticket.bookingId)).limit(1);
       if (!booking) return null;
-      if (booking.userId !== ctx.user.id && ctx.user.role !== "admin") {
-        throw new TRPCError({ code: "FORBIDDEN" });
+      const owner = Boolean(ctx.user && (booking.userId === ctx.user.id || ctx.user.role === "admin"));
+      if (!owner && !hasGuestAccess(booking, input.accessToken)) {
+        throw new TRPCError({ code: "NOT_FOUND" });
       }
       const [passenger] = await db
         .select()
@@ -190,9 +205,9 @@ export const accountRouter = router({
   updateProfile: protectedProcedure
     .input(
       z.object({
-        name: z.string().optional(),
-        phone: z.string().optional(),
-        email: z.string().email().optional(),
+        name: z.string().trim().min(3).max(160).refine(value => value.split(/\s+/).length >= 2, "Enter your first and last name"),
+        phone: z.string().trim().min(7).max(32).refine(value => value.replace(/\D/g, "").length >= 7, "Enter a valid phone number"),
+        email: z.string().trim().email().max(320),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -201,9 +216,9 @@ export const accountRouter = router({
       await db
         .update(users)
         .set({
-          name: input.name ?? ctx.user.name,
-          phone: input.phone ?? ctx.user.phone,
-          email: input.email ?? ctx.user.email,
+          name: input.name,
+          phone: input.phone,
+          email: input.email,
         })
         .where(eq(users.id, ctx.user.id));
       return { ok: true };
@@ -416,6 +431,11 @@ export const accountRouter = router({
   startMembershipCheckout: protectedProcedure
     .input(z.object({ origin: z.string().url() }))
     .mutation(async ({ ctx, input }) => {
+      const origin = approvedCheckoutOrigin(input.origin, ctx.req.headers.origin);
+      const profile = await getMemberProfileStatus(ctx.user.id);
+      if (!profile.complete) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Complete your name, email, phone and ID photo before joining." });
+      }
       if (await getActiveMembership(ctx.user.id)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Your membership is already active. Manage it in your account." });
       }
@@ -424,10 +444,9 @@ export const accountRouter = router({
       }
       const settings = await getSettings();
       const stripe = getStripe();
-      const origin = input.origin.replace(/\/$/, "");
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",
-        customer_email: ctx.user.email ?? undefined,
+        customer_email: profile.email,
         allow_promotion_codes: true,
         success_url: `${origin}/account/membership?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${origin}/membership`,
@@ -440,14 +459,14 @@ export const accountRouter = router({
         subscription_data: {
           metadata: {
             user_id: String(ctx.user.id),
-            customer_email: ctx.user.email ?? "",
-            customer_name: ctx.user.name ?? "",
+            customer_email: profile.email,
+            customer_name: profile.name,
           },
         },
         metadata: {
           user_id: String(ctx.user.id),
-          customer_email: ctx.user.email ?? "",
-          customer_name: ctx.user.name ?? "",
+          customer_email: profile.email,
+          customer_name: profile.name,
           kind: "membership",
         },
       });
@@ -456,6 +475,7 @@ export const accountRouter = router({
   billingPortal: protectedProcedure
     .input(z.object({ origin: z.string().url() }))
     .mutation(async ({ ctx, input }) => {
+      const origin = approvedCheckoutOrigin(input.origin, ctx.req.headers.origin);
       if (!ctx.user.stripeCustomerId || !stripeEnabled()) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -464,7 +484,7 @@ export const accountRouter = router({
       }
       const session = await getStripe().billingPortal.sessions.create({
         customer: ctx.user.stripeCustomerId,
-        return_url: `${input.origin.replace(/\/$/, "")}/account/payments`,
+        return_url: `${origin}/account/payments`,
       });
       return { url: session.url };
     }),

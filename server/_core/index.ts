@@ -9,15 +9,46 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { ensureSeed } from "../seed";
 import { runReminders } from "../services/reminders";
+import { getMemberIdPhoto } from "../services/member-profile";
 import { sdk } from "./sdk";
 
 async function startServer() {
   const app = express();
   const server = createServer(app);
 
+  app.use((req, res, next) => {
+    if (/^\/(confirmation|ticket|checkout|book|account|driver|admin)(\/|$)/.test(req.path)) {
+      res.set("Cache-Control", "private, no-store, max-age=0");
+      res.set("Referrer-Policy", "no-referrer");
+      res.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+    }
+    next();
+  });
+
   app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
   app.get("/api/platform/config.js", (_req, res) => {
     res.set("Cache-Control", "no-store").type("application/javascript").send(publicPlatformScript());
+  });
+
+  app.get("/api/member-id/:userId", async (req, res) => {
+    res.set("Cache-Control", "private, no-store, max-age=0");
+    res.set("X-Content-Type-Options", "nosniff");
+    res.set("Referrer-Policy", "no-referrer");
+    try {
+      const viewer = await sdk.authenticateRequest(req);
+      const userId = Number(req.params.userId);
+      if (viewer.isCron || !Number.isSafeInteger(userId) || userId < 1 ||
+          (viewer.id !== userId && viewer.role !== "admin")) {
+        res.status(404).end();
+        return;
+      }
+      const photo = await getMemberIdPhoto(userId);
+      if (!photo) { res.status(404).end(); return; }
+      res.type(photo.mimeType).send(photo.bytes);
+    } catch (error) {
+      console.error("[member ID] secure read failed", error instanceof Error ? error.name : "unknown");
+      res.status(404).end();
+    }
   });
 
   app.post(
@@ -44,9 +75,14 @@ async function startServer() {
     }
   });
 
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  app.use(express.json({ limit: "4mb" }));
+  app.use(express.urlencoded({ limit: "4mb", extended: true }));
   registerOAuthRoutes(app);
+  app.use("/api/trpc", (_req, res, next) => {
+    res.set("Cache-Control", "private, no-store, max-age=0");
+    res.set("Referrer-Policy", "no-referrer");
+    next();
+  });
   app.use(
     "/api/trpc",
     createExpressMiddleware({

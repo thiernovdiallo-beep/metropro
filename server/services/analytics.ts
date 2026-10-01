@@ -194,7 +194,9 @@ export async function getAnalytics() {
       : Math.round(ticketPayments.reduce((s, p) => s + p.amountCents, 0) / ticketPayments.length);
 
   const userCounts = new Map<number, number>();
-  for (const b of confirmed) userCounts.set(b.userId, (userCounts.get(b.userId) ?? 0) + 1);
+  for (const b of confirmed) {
+    if (b.userId !== null) userCounts.set(b.userId, (userCounts.get(b.userId) ?? 0) + 1);
+  }
   const repeatCustomers = [...userCounts.values()].filter(n => n > 1).length;
   const uniqueCustomers = userCounts.size;
   const repeatPercent = uniqueCustomers

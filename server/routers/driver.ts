@@ -227,6 +227,7 @@ export const driverRouter = router({
           )
         );
       for (const b of confirmed) {
+        if (b.userId === null) continue;
         await notify({
           userId: b.userId,
           templateKey: TEMPLATES.trip_delay,

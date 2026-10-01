@@ -22,7 +22,7 @@ export default function SearchResults() {
   const type = params.get("type") ?? "one_way";
   const { user } = useAuth();
   const memberQ = trpc.account.overview.useQuery(undefined, { enabled: Boolean(user) });
-  const isMember = memberQ.data?.membership?.status === "active";
+  const isMember = memberQ.data?.memberFareEligible ?? false;
   const outbound = trpc.public.search.useQuery(
     { originCityId: origin, destinationCityId: dest, date, passengers: pax, isMember },
     { enabled: Boolean(origin && dest && date) }

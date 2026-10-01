@@ -2,17 +2,19 @@ import { PageShell, Wordmark } from "@/components/Brand";
 import { formatDateLong, formatTime } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { QRCodeSVG } from "qrcode.react";
-import { useRoute } from "wouter";
+import { useRoute, useSearch } from "wouter";
 
 export default function Ticket() {
   const [, params] = useRoute("/ticket/:token");
   const token = params?.token ?? "";
-  const query = trpc.account.ticketByToken.useQuery({ token }, { enabled: Boolean(token) });
+  const search = useSearch();
+  const accessToken = new URLSearchParams(search).get("access") ?? undefined;
+  const query = trpc.account.ticketByToken.useQuery({ token, accessToken }, { enabled: Boolean(token) });
   const data = query.data;
   if (!data?.ticket || !data.booking || !data.passenger || !data.trip) {
     return (
       <PageShell>
-        <div className="container py-16">Loading ticket…</div>
+        <div className="container py-16">{query.error ? "A private booking link or member sign-in is needed to open this ticket." : "Loading ticket…"}</div>
       </PageShell>
     );
   }

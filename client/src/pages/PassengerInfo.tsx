@@ -31,7 +31,7 @@ export default function PassengerInfo() {
   const settings = trpc.public.settings.useQuery();
   const saved = trpc.account.savedPassengers.useQuery(undefined, { enabled: isAuthenticated });
   const overview = trpc.account.overview.useQuery(undefined, { enabled: isAuthenticated });
-  const hasMembership = overview.data?.membership?.status === "active";
+  const hasMembership = overview.data?.memberFareEligible ?? false;
   const outId = Number(params.get("out"));
   const retId = Number(params.get("ret"));
   const roundTrip = Boolean(retId);
@@ -94,11 +94,16 @@ export default function PassengerInfo() {
           The traveling member pays {money(member)} for their own regular seat; the front seat is always {money(front)}.
         </p>
         {!isAuthenticated ? (
-          <div className="ticket-card mt-6 p-5">
-            <p className="text-sm">Sign in to book and retrieve digital tickets.</p>
-            <Button className="mt-3" onClick={() => startLogin()}>Sign in</Button>
+          <div className="mt-6 rounded-xl border border-primary/20 bg-secondary p-4 text-sm">
+            <strong>Booking as a guest.</strong> No sign-in or ID photo is needed. Enter your contact details and save your private ticket link after payment.
+            <button type="button" className="ml-1 font-semibold text-primary underline" onClick={() => { sessionStorage.setItem("metropro-member-onboarding", "1"); startLogin(); }}>Member sign in</button>
           </div>
-        ) : (
+        ) : overview.data?.membership && !overview.data.memberFareEligible ? (
+          <div className="mt-6 rounded-xl border border-primary/20 bg-secondary p-4 text-sm">
+            Your paid membership requires a completed name, email, phone and ID photo for the member fare.
+            <Link href="/account/settings" className="ml-1 font-semibold text-primary underline">Finish your profile</Link>
+          </div>
+        ) : null}
           <form className="mt-7 grid min-w-0 gap-7" onSubmit={go}>
             <section className="ticket-card grid min-w-0 gap-4 p-5 sm:grid-cols-2 sm:p-6" aria-label="Contact information">
               <h2 className="font-serif text-xl sm:col-span-2">Contact details</h2>
@@ -208,7 +213,6 @@ export default function PassengerInfo() {
               Review booking and total
             </Button>
           </form>
-        )}
       </div>
     </PageShell>
   );

@@ -93,20 +93,22 @@ export async function fulfillTicketPayment(opts: {
 
   if (result.state !== "confirmed" || !result.booking) return result.state;
   const booking = result.booking;
-  await notify({
-    userId: booking.userId,
-    templateKey: TEMPLATES.booking_confirmation,
-    title: "Booking confirmed",
-    body: `Your Metro Pro booking ${booking.bookingNumber} is confirmed. Your digital ticket is ready.`,
-    payload: { bookingId: booking.id, bookingNumber: booking.bookingNumber },
-  });
-  await notify({
-    userId: booking.userId,
-    templateKey: TEMPLATES.payment_confirmation,
-    title: "Payment received",
-    body: `We received payment for booking ${booking.bookingNumber}.`,
-    payload: { bookingId: booking.id },
-  });
+  if (booking.userId !== null) {
+    await notify({
+      userId: booking.userId,
+      templateKey: TEMPLATES.booking_confirmation,
+      title: "Booking confirmed",
+      body: `Your Metro Pro booking ${booking.bookingNumber} is confirmed. Your digital ticket is ready.`,
+      payload: { bookingId: booking.id, bookingNumber: booking.bookingNumber },
+    });
+    await notify({
+      userId: booking.userId,
+      templateKey: TEMPLATES.payment_confirmation,
+      title: "Payment received",
+      body: `We received payment for booking ${booking.bookingNumber}.`,
+      payload: { bookingId: booking.id },
+    });
+  }
   return "confirmed";
 }
 
@@ -176,7 +178,7 @@ export async function recordLatePaymentRefund(opts: {
     }).where(eq(bookings.id, current.id));
     return current;
   });
-  if (booking) await notify({
+  if (booking && booking.userId !== null) await notify({
     userId: booking.userId,
     templateKey: TEMPLATES.refund,
     title: "Refund processing — selected seats expired",

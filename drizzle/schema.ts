@@ -4,6 +4,7 @@ import {
   index,
   int,
   json,
+  longtext,
   mysqlEnum,
   mysqlTable,
   text,
@@ -28,6 +29,14 @@ export const users = mysqlTable("users", {
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+
+// ID image ciphertext is never served through the public storage namespace.
+export const memberIdPhotos = mysqlTable("memberIdPhotos", {
+  userId: int("userId").primaryKey(),
+  ciphertext: longtext("ciphertext").notNull(),
+  mimeType: varchar("mimeType", { length: 32 }).notNull(),
+  uploadedAt: timestamp("uploadedAt").defaultNow().onUpdateNow().notNull(),
+});
 
 export const driverProfiles = mysqlTable(
   "driverProfiles",
@@ -176,7 +185,7 @@ export const bookings = mysqlTable(
   {
     id: int("id").autoincrement().primaryKey(),
     bookingNumber: varchar("bookingNumber", { length: 24 }).notNull(),
-    userId: int("userId").notNull(),
+    userId: int("userId"),
     outboundDepartureId: int("outboundDepartureId").notNull(),
     returnDepartureId: int("returnDepartureId"),
     tripType: mysqlEnum("tripType", ["one_way", "round_trip"]).notNull(),
@@ -199,6 +208,7 @@ export const bookings = mysqlTable(
     contactLastName: varchar("contactLastName", { length: 80 }).notNull(),
     contactPhone: varchar("contactPhone", { length: 32 }).notNull(),
     contactEmail: varchar("contactEmail", { length: 320 }).notNull(),
+    guestAccessHash: varchar("guestAccessHash", { length: 64 }),
     emergencyName: varchar("emergencyName", { length: 160 }),
     emergencyPhone: varchar("emergencyPhone", { length: 32 }),
     promoCode: varchar("promoCode", { length: 40 }),
@@ -263,7 +273,7 @@ export const payments = mysqlTable(
   "payments",
   {
     id: int("id").autoincrement().primaryKey(),
-    userId: int("userId").notNull(),
+    userId: int("userId"),
     bookingId: int("bookingId"),
     membershipId: int("membershipId"),
     kind: mysqlEnum("kind", ["ticket", "membership"]).notNull(),

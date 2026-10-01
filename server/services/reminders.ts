@@ -51,6 +51,7 @@ export async function runReminders(now = new Date()) {
     const [dest] = await db.select().from(cities).where(eq(cities.id, route.destinationCityId)).limit(1);
     const confirmed = await bookingsForDeparture(dep.id);
     for (const b of confirmed) {
+      if (b.userId === null) continue;
       if (b.reminder24hSentAt && b.outboundDepartureId === dep.id) continue;
       const key = b.outboundDepartureId === dep.id ? TEMPLATES.reminder_24h : TEMPLATES.upcoming_departure;
       await notify({
@@ -72,6 +73,7 @@ export async function runReminders(now = new Date()) {
   for (const dep of boarding) {
     const confirmed = await bookingsForDeparture(dep.id);
     for (const b of confirmed) {
+      if (b.userId === null) continue;
       if (b.boardingReminderSentAt && b.outboundDepartureId === dep.id) continue;
       await notify({
         userId: b.userId,

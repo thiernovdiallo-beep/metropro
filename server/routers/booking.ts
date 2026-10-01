@@ -3,13 +3,16 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { bookings, cities, departures, locations, passengers, routes, tickets } from "../../drizzle/schema";
 import { getActiveMembership, getDb } from "../db";
+import { createGuestAccess, hasGuestAccess } from "../services/guest-access";
+import { approvedCheckoutOrigin } from "../services/checkout-origin";
 import { assertBookable, holdSeats, releaseHolds } from "../services/inventory";
+import { getMemberProfileStatus } from "../services/member-profile";
 import { frontCount, legFareCents, seatFareCents, validateSeatSelections, type SeatSelection } from "../services/pricing";
 import { getSettings } from "../services/policies";
 import { makeBookingNumber } from "../services/tickets";
 import { getStripe, stripeEnabled } from "../stripe/client";
 import { ticketLineItem } from "../stripe/products";
-import { protectedProcedure, router } from "../_core/trpc";
+import { publicProcedure, router } from "../_core/trpc";
 import { insertId } from "../lib/mysql";
 
 const passengerSchema = z.object({
@@ -63,14 +66,15 @@ function lineItemsForLeg(departure: DepartureDetails, selections: SeatSelection[
 }
 
 export const bookingRouter = router({
-  quote: protectedProcedure
+  quote: publicProcedure
     .input(selectionInput)
     .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-      const membership = await getActiveMembership(ctx.user.id);
-      const isMember = Boolean(membership);
-      checkedSelections(input.passengers, input.passengerCount, Boolean(input.returnDepartureId), isMember, ctx.user.name);
+      const membership = ctx.user ? await getActiveMembership(ctx.user.id) : null;
+      const profile = membership && ctx.user ? await getMemberProfileStatus(ctx.user.id) : null;
+      const isMember = Boolean(membership && profile?.complete);
+      checkedSelections(input.passengers, input.passengerCount, Boolean(input.returnDepartureId), isMember, profile?.name ?? null);
       const outbound = await loadPricedDeparture(input.outboundDepartureId);
       if (!outbound) throw new TRPCError({ code: "NOT_FOUND", message: "Departure not found" });
       const ret = input.returnDepartureId ? await loadPricedDeparture(input.returnDepartureId) : null;
@@ -106,7 +110,7 @@ export const bookingRouter = router({
         returnTrip: ret,
       };
     }),
-  createCheckout: protectedProcedure
+  createCheckout: publicProcedure
     .input(selectionInput.extend({
       origin: z.string().url(),
       contactFirstName: z.string().min(1),
@@ -117,15 +121,17 @@ export const bookingRouter = router({
       emergencyPhone: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      const origin = approvedCheckoutOrigin(input.origin, ctx.req.headers.origin);
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       const settings = await getSettings();
       if (settings.emergencyContactRequired && (!input.emergencyName || !input.emergencyPhone)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Emergency contact is required" });
       }
-      const membership = await getActiveMembership(ctx.user.id);
-      const isMember = Boolean(membership);
-      checkedSelections(input.passengers, input.passengerCount, Boolean(input.returnDepartureId), isMember, ctx.user.name);
+      const membership = ctx.user ? await getActiveMembership(ctx.user.id) : null;
+      const profile = membership && ctx.user ? await getMemberProfileStatus(ctx.user.id) : null;
+      const isMember = Boolean(membership && profile?.complete);
+      checkedSelections(input.passengers, input.passengerCount, Boolean(input.returnDepartureId), isMember, profile?.name ?? null);
       const outbound = await loadPricedDeparture(input.outboundDepartureId);
       if (!outbound) throw new TRPCError({ code: "NOT_FOUND", message: "Departure not found" });
       const ret = input.returnDepartureId ? await loadPricedDeparture(input.returnDepartureId) : null;
@@ -159,6 +165,7 @@ export const bookingRouter = router({
       const returnQuotedCents = ret ? legFareCents(ret.route, input.passengers, "return") : 0;
       const amountCents = outboundQuotedCents + returnQuotedCents;
       const bookingNumber = makeBookingNumber();
+      const guestAccess = ctx.user ? null : createGuestAccess();
       // Stripe requires at least 30 minutes. Keep seats for five more minutes
       // after Checkout expires so paid webhooks can confirm both legs safely.
       const checkoutMinutes = Math.min(1430, Math.max(30, settings.holdMinutes));
@@ -167,7 +174,8 @@ export const bookingRouter = router({
       try {
         const insertResult = await db.insert(bookings).values({
           bookingNumber,
-          userId: ctx.user.id,
+          userId: ctx.user?.id ?? null,
+          guestAccessHash: guestAccess?.hash ?? null,
           outboundDepartureId: outbound.id,
           returnDepartureId: ret?.id ?? null,
           tripType: ret ? "round_trip" : "one_way",
@@ -199,29 +207,28 @@ export const bookingRouter = router({
           });
         }
         if (!stripeEnabled()) throw new Error("Payments are not configured");
-        const origin = input.origin.replace(/\/$/, "");
         const session = await getStripe().checkout.sessions.create({
           mode: "payment",
           expires_at: checkoutExpiresAt,
           customer_email: input.contactEmail,
           client_reference_id: String(bookingId),
           allow_promotion_codes: true,
-          success_url: `${origin}/confirmation?booking=${bookingNumber}&session_id={CHECKOUT_SESSION_ID}`,
+          success_url: `${origin}/confirmation?booking=${encodeURIComponent(bookingNumber)}${guestAccess ? `&access=${encodeURIComponent(guestAccess.token)}` : ""}&session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${origin}/checkout?canceled=1`,
           line_items: [
             ...lineItemsForLeg(outbound, input.passengers, "outbound"),
             ...(ret ? lineItemsForLeg(ret, input.passengers, "return") : []),
           ],
-          payment_intent_data: { metadata: { user_id: String(ctx.user.id), booking_id: String(bookingId) } },
+          payment_intent_data: { metadata: { ...(ctx.user ? { user_id: String(ctx.user.id) } : {}), booking_id: String(bookingId) } },
           metadata: {
-            user_id: String(ctx.user.id),
+            ...(ctx.user ? { user_id: String(ctx.user.id) } : {}),
             customer_email: input.contactEmail,
             customer_name: `${input.contactFirstName} ${input.contactLastName}`,
             booking_id: String(bookingId),
           },
         });
         await db.update(bookings).set({ stripeCheckoutSessionId: session.id }).where(eq(bookings.id, bookingId));
-        return { checkoutUrl: session.url, bookingNumber, bookingId };
+        return { checkoutUrl: session.url, bookingNumber, bookingId, guestAccessToken: guestAccess?.token ?? null };
       } catch (error) {
         await releaseHolds(outbound.id, input.passengerCount, outFront);
         if (ret) await releaseHolds(ret.id, input.passengerCount, retFront);
@@ -229,17 +236,19 @@ export const bookingRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error instanceof Error ? error.message : "Checkout failed" });
       }
     }),
-  getByNumber: protectedProcedure
-    .input(z.object({ bookingNumber: z.string() }))
+  getByNumber: publicProcedure
+    .input(z.object({ bookingNumber: z.string().min(1).max(24), accessToken: z.string().max(128).optional() }))
     .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) return null;
       const [booking] = await db.select().from(bookings).where(eq(bookings.bookingNumber, input.bookingNumber)).limit(1);
       if (!booking) return null;
-      if (booking.userId !== ctx.user.id && ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      const owner = Boolean(ctx.user && (booking.userId === ctx.user.id || ctx.user.role === "admin"));
+      if (!owner && !hasGuestAccess(booking, input.accessToken)) throw new TRPCError({ code: "NOT_FOUND" });
       const pax = await db.select().from(passengers).where(eq(passengers.bookingId, booking.id));
       const tix = await db.select().from(tickets).where(eq(tickets.bookingId, booking.id));
-      return { booking, passengers: pax, tickets: tix };
+      const { guestAccessHash: _secretHash, ...safeBooking } = booking;
+      return { booking: safeBooking, passengers: pax, tickets: tix };
     }),
 });
 

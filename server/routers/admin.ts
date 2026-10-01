@@ -479,7 +479,7 @@ export const adminRouter = router({
       }
       await db.update(bookings).set({ status: "refunded" }).where(eq(bookings.id, booking.id));
       await db.update(tickets).set({ status: "voided" }).where(eq(tickets.bookingId, booking.id));
-      await notify({
+      if (booking.userId !== null) await notify({
         userId: booking.userId,
         templateKey: TEMPLATES.refund,
         title: "Refund issued",

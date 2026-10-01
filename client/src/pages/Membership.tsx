@@ -5,12 +5,14 @@ import { trpc } from "@/lib/trpc";
 import { startLogin } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 
 export default function Membership() {
+  const [, setLocation] = useLocation();
   const settings = trpc.public.settings.useQuery();
   const { isAuthenticated } = useAuth();
   const overview = trpc.account.overview.useQuery(undefined, { enabled: isAuthenticated });
+  const profile = trpc.account.memberProfile.useQuery(undefined, { enabled: isAuthenticated });
   const start = trpc.account.startMembershipCheckout.useMutation();
   return (
     <PageShell>
@@ -28,13 +30,25 @@ export default function Membership() {
             <li key={b}>· {b}</li>
           ))}
         </ul>
+        <p className="mt-6 rounded-xl border border-border bg-secondary p-4 text-sm leading-relaxed">
+          To create a member profile, sign in and add your full name, email, phone number and a private ID photo.
+          Paying for membership is a separate step. Guests can <a href="/#trip-search" className="font-semibold text-primary underline">book a regular ticket without signing in or uploading ID</a>.
+        </p>
+        {isAuthenticated && !profile.data?.complete && !profile.isLoading ? (
+          <p className="mt-4 text-sm font-medium text-primary">Your member profile still needs required information and an ID photo.</p>
+        ) : null}
         {overview.data?.membership?.status === "active" ? (
           <Link href="/account/membership"><Button className="mt-8 h-12">Manage my membership</Button></Link>
         ) : <Button
           className="mt-8 h-12"
           onClick={async () => {
             if (!isAuthenticated) {
+              sessionStorage.setItem("metropro-member-onboarding", "1");
               startLogin();
+              return;
+            }
+            if (!profile.data?.complete) {
+              setLocation("/account/settings");
               return;
             }
             try {
@@ -48,7 +62,7 @@ export default function Membership() {
             }
           }}
         >
-          Join Metro Pro Member
+          {!isAuthenticated ? "Create member profile / Sign in" : profile.data?.complete ? "Join Metro Pro Member" : "Complete member profile"}
         </Button>}
       </div>
     </PageShell>

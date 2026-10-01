@@ -2,13 +2,13 @@ import { PageShell } from "@/components/Brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { startLogin } from "@/const";
+import { COOKIE_NAME, startLogin } from "@/const";
 import { formatDate, formatTime, moneyExact } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Link, useRoute } from "wouter";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const NAV = [
   ["/account", "Upcoming trips"],
@@ -20,7 +20,7 @@ const NAV = [
   ["/account/receipts", "Receipts"],
   ["/account/notifications", "Notifications"],
   ["/account/support", "Customer support"],
-  ["/account/settings", "Profile settings"],
+  ["/account/settings", "Member profile"],
 ];
 
 export default function Account() {
@@ -33,8 +33,9 @@ export default function Account() {
         <div className="container py-16">
           <h1 className="font-serif text-3xl">Your trips</h1>
           <Button className="mt-4" onClick={() => startLogin()}>
-            Sign in
+            Member sign in
           </Button>
+          <a href="/#trip-search" className="ml-2 mt-4 inline-flex min-h-10 items-center rounded-lg border border-primary/40 px-4 text-sm font-semibold text-primary">Book without an account</a>
         </div>
       </PageShell>
     );
@@ -58,7 +59,7 @@ export default function Account() {
           {section === "receipts" ? <Receipts /> : null}
           {section === "notifications" ? <Notes /> : null}
           {section === "support" ? <Support /> : null}
-          {section === "settings" ? <Settings userName={user?.name} email={user?.email} phone={user?.phone} /> : null}
+          {section === "settings" ? <Settings userId={user?.id} userName={user?.name} email={user?.email} phone={user?.phone} /> : null}
           {!section ? <Upcoming /> : null}
         </section>
       </div>
@@ -145,6 +146,7 @@ function Tickets() {
 
 function MembershipPanel() {
   const overview = trpc.account.overview.useQuery();
+  const profile = trpc.account.memberProfile.useQuery();
   const settings = trpc.public.settings.useQuery();
   const start = trpc.account.startMembershipCheckout.useMutation();
   return (
@@ -158,9 +160,15 @@ function MembershipPanel() {
           <li key={b}>{b}</li>
         ))}
       </ul>
+      {!profile.data?.complete ? (
+        <div className="mt-5 rounded-xl border border-primary/20 bg-secondary p-4 text-sm">
+          A member profile needs your full name, email, phone and ID photo before you can join or use the member fare.
+          <Link href="/account/settings" className="ml-1 font-semibold text-primary underline">Complete your profile</Link>
+        </div>
+      ) : null}
       {overview.data?.membership?.status === "active" ? (
         <Link href="/account/payments"><Button className="mt-6">Manage membership billing</Button></Link>
-      ) : <Button
+      ) : profile.data?.complete ? <Button
         className="mt-6"
         onClick={async () => {
           try {
@@ -175,7 +183,7 @@ function MembershipPanel() {
         }}
       >
         Become a Member · {moneyExact(settings.data?.membershipPriceCents ?? 2500)}/mo
-      </Button>}
+      </Button> : null}
     </div>
   );
 }
@@ -319,42 +327,126 @@ function Support() {
 }
 
 function Settings({
+  userId,
   userName,
   email,
   phone,
 }: {
+  userId?: number;
   userName?: string | null;
   email?: string | null;
   phone?: string | null;
 }) {
-  const save = trpc.account.updateProfile.useMutation({ onSuccess: () => toast.success("Saved") });
+  const utils = trpc.useUtils();
+  const profile = trpc.account.memberProfile.useQuery();
+  const save = trpc.account.updateProfile.useMutation();
+  const upload = trpc.account.uploadMemberId.useMutation();
   const [name, setName] = useState(userName ?? "");
   const [mail, setMail] = useState(email ?? "");
   const [tel, setTel] = useState(phone ?? "");
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [idPreviewUrl, setIdPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => () => { if (idPreviewUrl) URL.revokeObjectURL(idPreviewUrl); }, [idPreviewUrl]);
+
+  async function viewId() {
+    if (!userId) return;
+    try {
+      let token: string | undefined;
+      try {
+        const raw = sessionStorage.getItem("manus-cookie") ?? "";
+        token = raw.split(";").find(part => part.trim().startsWith(`${COOKIE_NAME}=`))?.trim().slice(COOKIE_NAME.length + 1);
+      } catch { /* OAuth cookie may be available even without sessionStorage. */ }
+      const response = await fetch(`/api/member-id/${userId}`, {
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error("Sign in again to view your ID photo.");
+      setIdPreviewUrl(URL.createObjectURL(await response.blob()));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not open your ID photo");
+    }
+  }
+
+  async function onSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!profile.data?.idPhotoUploadedAt && !photo) {
+      toast.error("Select a picture of your ID to complete your member profile.");
+      return;
+    }
+    if (photo && photo.size > 2 * 1024 * 1024) {
+      toast.error("Your ID photo must be under 2 MB.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await save.mutateAsync({ name, email: mail, phone: tel });
+      if (photo) {
+        const encoded = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () => reject(new Error("Could not read this ID image"));
+          reader.onload = () => {
+            const result = String(reader.result ?? "");
+            resolve(result.slice(result.indexOf(",") + 1));
+          };
+          reader.readAsDataURL(photo);
+        });
+        await upload.mutateAsync({ base64: encoded });
+        setPhoto(null);
+      }
+      await Promise.all([profile.refetch(), utils.auth.me.invalidate(), utils.account.overview.invalidate()]);
+      toast.success("Member profile saved securely");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save your profile");
+    } finally {
+      setSaving(false);
+    }
+  }
   return (
     <div>
-      <h1 className="font-serif text-3xl">Profile settings</h1>
+      <h1 className="font-serif text-3xl">Your member profile</h1>
+      <p className="mt-2 max-w-lg text-sm leading-relaxed text-muted-foreground">
+        Your full name, email, phone number and ID photo are required before joining Metro Pro Member.
+        Guest tickets never require an account or ID upload.
+      </p>
+      <div className={`mt-5 rounded-xl border px-4 py-3 text-sm ${profile.data?.complete ? "border-[#b7e2d3] bg-[#edfaf3] text-[#176447]" : "border-border bg-secondary text-foreground"}`}>
+        {profile.isLoading ? "Checking your profile…" : profile.data?.complete ? "Profile complete — membership is available." : "Profile incomplete — add every required field and your ID photo."}
+      </div>
       <form
-        className="mt-4 grid max-w-md gap-3"
-        onSubmit={e => {
-          e.preventDefault();
-          save.mutate({ name, email: mail, phone: tel });
-        }}
+        className="mt-6 grid max-w-md min-w-0 gap-4"
+        onSubmit={onSave}
       >
         <div>
-          <Label>Name</Label>
-          <Input className="mt-1" value={name} onChange={e => setName(e.target.value)} />
+          <Label htmlFor="member-name">Full name *</Label>
+          <Input id="member-name" className="mt-1 h-12" autoComplete="name" value={name} onChange={e => setName(e.target.value)} required />
         </div>
         <div>
-          <Label>Email</Label>
-          <Input className="mt-1" value={mail} onChange={e => setMail(e.target.value)} />
+          <Label htmlFor="member-email">Email *</Label>
+          <Input id="member-email" type="email" className="mt-1 h-12" autoComplete="email" value={mail} onChange={e => setMail(e.target.value)} required />
         </div>
         <div>
-          <Label>Phone</Label>
-          <Input className="mt-1" value={tel} onChange={e => setTel(e.target.value)} />
+          <Label htmlFor="member-phone">Phone number *</Label>
+          <Input id="member-phone" type="tel" className="mt-1 h-12" autoComplete="tel" value={tel} onChange={e => setTel(e.target.value)} required />
         </div>
-        <Button type="submit">Save</Button>
+        <div className="min-w-0 rounded-xl border border-dashed border-primary/35 bg-[#f4fbfd] p-4">
+          <Label htmlFor="member-id">Picture of your ID *</Label>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">JPEG, PNG or WebP · 2 MB maximum. Stored encrypted and never shown in public search or on tickets.</p>
+          <Input id="member-id" type="file" accept="image/jpeg,image/png,image/webp" className="mt-3 h-auto min-h-12 min-w-0 bg-white py-2" required={!profile.data?.idPhotoUploadedAt}
+            onChange={e => setPhoto(e.target.files?.[0] ?? null)} />
+          {profile.data?.idPhotoUploadedAt ? <p className="mt-2 text-xs font-semibold text-primary">ID photo on file · {new Date(profile.data.idPhotoUploadedAt).toLocaleDateString()} · choose a new image to replace it</p> : null}
+          {photo ? <p className="mt-2 text-xs">Selected: {photo.name}</p> : null}
+          {profile.data?.idPhotoUploadedAt ? (
+            <button type="button" className="mt-3 text-xs font-semibold text-primary underline" onClick={idPreviewUrl ? () => setIdPreviewUrl(null) : viewId}>
+              {idPreviewUrl ? "Hide my ID photo" : "View my ID photo privately"}
+            </button>
+          ) : null}
+          {idPreviewUrl ? <img src={idPreviewUrl} alt="Your uploaded ID photo" className="mt-3 max-h-64 max-w-full rounded-lg border border-border object-contain" /> : null}
+        </div>
+        <Button type="submit" className="h-12" disabled={saving || profile.isLoading}>{saving ? "Saving securely…" : "Save member profile"}</Button>
       </form>
+      {profile.data?.complete ? <Link href="/account/membership" className="mt-5 inline-block text-sm font-semibold text-primary underline">Continue to membership</Link> : null}
     </div>
   );
 }

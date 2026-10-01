@@ -1,15 +1,18 @@
 import { PageShell } from "@/components/Brand";
+import { startLogin } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { isoDate, money } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
-import { ArrowRightLeft } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { ArrowRightLeft, IdCard, Ticket } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 
 export default function Home() {
   const [, setLocation] = useLocation();
+  const { isAuthenticated } = useAuth();
   const citiesQuery = trpc.public.cities.useQuery();
   const settingsQuery = trpc.public.settings.useQuery();
   const cities = citiesQuery.data ?? [];
@@ -51,6 +54,25 @@ export default function Home() {
   const member = settingsQuery.data?.memberFareCents ?? 10000;
   const front = settingsQuery.data?.frontFareCents ?? 20000;
 
+  useEffect(() => {
+    if (isAuthenticated && sessionStorage.getItem("metropro-member-onboarding") === "1") {
+      sessionStorage.removeItem("metropro-member-onboarding");
+      setLocation("/account/settings");
+    }
+  }, [isAuthenticated, setLocation]);
+
+  useEffect(() => {
+    if (window.location.hash === "#trip-search") {
+      document.getElementById("trip-search")?.scrollIntoView({ block: "start" });
+    }
+  }, []);
+
+  function memberEntry() {
+    if (isAuthenticated) { setLocation("/account/settings"); return; }
+    sessionStorage.setItem("metropro-member-onboarding", "1");
+    startLogin();
+  }
+
   return (
     <PageShell>
       <section className="relative overflow-hidden bg-gradient-to-br from-[#e8f6fb] via-[#f6fbfd] to-[#e9f6ef] text-foreground">
@@ -69,14 +91,26 @@ export default function Home() {
               and one front passenger seat at {money(front)}. A traveling member pays {money(member)}{" "}
               for their own regular seat.
             </p>
-            <div className="mt-7 flex flex-wrap gap-2 text-xs font-semibold text-foreground/80">
-              <span className="rounded-full border border-border bg-white px-3 py-2">Clear fares</span>
-              <span className="rounded-full border border-border bg-white px-3 py-2">Real-time availability</span>
-              <span className="rounded-full border border-border bg-white px-3 py-2">Digital tickets</span>
+            <div className="mt-8 grid min-w-0 gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-[#badfdf] bg-white/90 p-4 shadow-sm">
+                <IdCard className="h-6 w-6 text-primary" aria-hidden="true" />
+                <h2 className="mt-3 font-serif text-xl">Member profile</h2>
+                <p className="mt-1 min-h-12 text-xs leading-relaxed text-muted-foreground">Sign in, add your name, email, phone and ID photo, then join for $25/month.</p>
+                <Button type="button" className="mt-4 min-h-11 w-full" onClick={memberEntry}>
+                  {isAuthenticated ? "My member profile" : "Log in / Create profile"}
+                </Button>
+              </div>
+              <div className="rounded-2xl border border-[#c6e3eb] bg-white/90 p-4 shadow-sm">
+                <Ticket className="h-6 w-6 text-primary" aria-hidden="true" />
+                <h2 className="mt-3 font-serif text-xl">{isAuthenticated ? "Book a ticket" : "Book as a guest"}</h2>
+                <p className="mt-1 min-h-12 text-xs leading-relaxed text-muted-foreground">{isAuthenticated ? "Choose a departure and keep your trip in your account. No extra profile steps to buy a regular ticket." : "No sign-in or ID upload. Choose a departure and pay only for your ticket."}</p>
+                <a href="#trip-search" className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-primary/40 bg-white px-4 text-sm font-semibold text-primary hover:bg-secondary">{isAuthenticated ? "Find a departure" : "Book without signing in"}</a>
+              </div>
             </div>
           </div>
-          <form onSubmit={search} className="ticket-card min-w-0 p-5 text-foreground sm:p-7">
+          <form id="trip-search" onSubmit={search} className="ticket-card min-w-0 scroll-mt-24 p-5 text-foreground sm:p-7">
             <p className="mb-4 font-serif text-xl">Find your seat</p>
+            <p className="mb-5 text-xs text-muted-foreground">Search and book with or without a member account.</p>
             <div className="mb-5 flex rounded-xl bg-secondary p-1 text-sm font-semibold">
               <button
                 type="button"

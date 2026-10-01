@@ -1,6 +1,6 @@
 {
   "routes": [
-    { "path": "/", "title": "Book a trip" },
+    { "path": "/", "title": "Metro Pro · Member login or guest booking" },
     { "path": "/search", "title": "Departures" },
     { "path": "/book", "title": "Passenger information" },
     { "path": "/checkout", "title": "Checkout" },
@@ -15,7 +15,7 @@
     { "path": "/account/receipts", "title": "Receipts" },
     { "path": "/account/notifications", "title": "Notifications" },
     { "path": "/account/support", "title": "Customer support" },
-    { "path": "/account/settings", "title": "Profile settings" },
+    { "path": "/account/settings", "title": "Member profile and private ID upload" },
     { "path": "/driver", "title": "Driver home" },
     { "path": "/driver/trip/:id", "title": "Trip manifest" },
     { "path": "/admin", "title": "Operations" },

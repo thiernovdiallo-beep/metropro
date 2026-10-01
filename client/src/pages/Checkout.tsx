@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { formatDate, formatTime, money } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 
 type SeatType = "standard" | "front";
@@ -28,6 +28,8 @@ type Draft = {
 };
 
 export default function Checkout() {
+  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [privateLink, setPrivateLink] = useState<string | null>(null);
   const draft = useMemo<Draft | null>(() => {
     try { return JSON.parse(sessionStorage.getItem("metropro-booking") || "null"); }
     catch { return null; }
@@ -58,6 +60,11 @@ export default function Checkout() {
         passengers: draft.passengers,
       });
       if (result.checkoutUrl) {
+        setPaymentUrl(result.checkoutUrl);
+        if (result.guestAccessToken) {
+          sessionStorage.setItem(`metropro-guest:${result.bookingNumber}`, result.guestAccessToken);
+          setPrivateLink(`/confirmation?booking=${encodeURIComponent(result.bookingNumber)}&access=${encodeURIComponent(result.guestAccessToken)}`);
+        }
         toast.message("Opening secure Stripe Checkout in a new tab.");
         window.open(result.checkoutUrl, "_blank");
       }
@@ -112,6 +119,12 @@ export default function Checkout() {
         <Button className="mt-6 h-12 w-full text-base" onClick={pay} disabled={!q || checkout.isPending}>
           {checkout.isPending ? "Holding your selected seats…" : "Continue to secure payment"}
         </Button>
+        {paymentUrl ? (
+          <div className="mt-4 rounded-xl border border-primary/20 bg-secondary p-4 text-sm">
+            If the payment tab did not open, <a href={paymentUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary underline">open secure Stripe Checkout</a>.
+            {privateLink ? <p className="mt-2">After payment, <Link href={privateLink} className="font-semibold text-primary underline">check your guest booking</Link> and save its private link. A return to the app is not proof of payment until the ticket appears.</p> : null}
+          </div>
+        ) : null}
       </div>
     </PageShell>
   );

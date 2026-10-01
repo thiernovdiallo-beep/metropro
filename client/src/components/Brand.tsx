@@ -66,7 +66,7 @@ export function SiteHeader() {
               </Button>
             </>
           ) : (
-            <Button onClick={() => startLogin()}>Sign in</Button>
+            <Button onClick={() => { sessionStorage.setItem("metropro-member-onboarding", "1"); startLogin(); }}>Member login</Button>
           )}
         </div>
       </div>

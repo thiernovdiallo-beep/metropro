@@ -51,7 +51,9 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   }
   if (user.email !== undefined) {
     values.email = user.email ?? null;
-    updateSet.email = user.email ?? null;
+    // A member may choose a different contact email in their required profile.
+    // OAuth reauthentication must not overwrite that saved contact preference.
+    if (!existing?.email) updateSet.email = user.email ?? null;
   }
   if (user.phone !== undefined) {
     values.phone = user.phone ?? null;

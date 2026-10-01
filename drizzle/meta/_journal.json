@@ -29,6 +29,13 @@
       "when": 1790839120931,
       "tag": "0003_fancy_vampiro",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1790843403466,
+      "tag": "0004_stale_the_order",
+      "breakpoints": true
     }
   ]
 }
