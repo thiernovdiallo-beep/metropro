@@ -42,7 +42,8 @@ async function markProcessed(eventId: string, type: string) {
 }
 
 function periodEnd(sub: Stripe.Subscription): Date | null {
-  const end = (sub as Stripe.Subscription & { current_period_end?: number }).current_period_end;
+  const end = sub.items.data[0]?.current_period_end ??
+    (sub as Stripe.Subscription & { current_period_end?: number }).current_period_end;
   return end ? new Date(end * 1000) : null;
 }
 

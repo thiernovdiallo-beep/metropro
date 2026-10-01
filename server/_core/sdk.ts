@@ -2,9 +2,10 @@ import { AXIOS_TIMEOUT_MS, COOKIE_NAME, ONE_YEAR_MS, decodeOAuthState } from "@s
 import { ForbiddenError } from "@shared/_core/errors";
 import axios, { type AxiosInstance } from "axios";
 import { parse as parseCookieHeader } from "cookie";
+import { eq } from "drizzle-orm";
 import type { Request } from "express";
 import { SignJWT, jwtVerify } from "jose";
-import type { User } from "../../drizzle/schema";
+import { memberCredentials, type User } from "../../drizzle/schema";
 import * as db from "../db";
 import { ENV } from "./env";
 import type {
@@ -22,6 +23,7 @@ export type SessionPayload = {
   openId: string;
   appId: string;
   name: string;
+  memberSessionVersion?: number;
 };
 
 const EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
@@ -166,13 +168,14 @@ class SDKServer {
    */
   async createSessionToken(
     openId: string,
-    options: { expiresInMs?: number; name?: string } = {}
+    options: { expiresInMs?: number; name?: string; memberSessionVersion?: number } = {}
   ): Promise<string> {
     return this.signSession(
       {
         openId,
         appId: ENV.appId,
         name: options.name || "",
+        memberSessionVersion: options.memberSessionVersion,
       },
       options
     );
@@ -191,6 +194,7 @@ class SDKServer {
       openId: payload.openId,
       appId: payload.appId,
       name: payload.name,
+      ...(payload.memberSessionVersion === undefined ? {} : { memberSessionVersion: payload.memberSessionVersion }),
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
       .setExpirationTime(expirationSeconds)
@@ -199,7 +203,7 @@ class SDKServer {
 
   async verifySession(
     cookieValue: string | undefined | null
-  ): Promise<{ openId: string; appId: string; name: string } | null> {
+  ): Promise<SessionPayload | null> {
     if (!cookieValue) {
       console.warn("[Auth] Missing session cookie");
       return null;
@@ -210,7 +214,7 @@ class SDKServer {
       const { payload } = await jwtVerify(cookieValue, secretKey, {
         algorithms: ["HS256"],
       });
-      const { openId, appId, name } = payload as Record<string, unknown>;
+      const { openId, appId, name, memberSessionVersion } = payload as Record<string, unknown>;
 
       if (
         !isNonEmptyString(openId) ||
@@ -225,6 +229,8 @@ class SDKServer {
         openId,
         appId,
         name,
+        memberSessionVersion: typeof memberSessionVersion === "number" && Number.isSafeInteger(memberSessionVersion)
+          ? memberSessionVersion : undefined,
       };
     } catch (error) {
       console.warn("[Auth] Session verification failed", String(error));
@@ -257,9 +263,17 @@ class SDKServer {
   }
 
   async authenticateRequest(req: Request): Promise<AuthenticatedUser> {
-    // 1. Prefer the session cookie (regular OAuth login).
+    // A member who explicitly signs in with a password can have a local bearer
+    // fallback while Preview still forwards an older Manus auto-login cookie.
+    // Prefer only a verified local-account token; ordinary OAuth still uses the
+    // established cookie-first flow.
     const cookies = this.parseCookies(req.headers.cookie);
-    let sessionToken = cookies.get(COOKIE_NAME);
+    const authHeader = req.headers.authorization;
+    const bearerToken = typeof authHeader === "string" && authHeader.startsWith("Bearer ")
+      ? authHeader.slice(7) : undefined;
+    const localBearerSession = bearerToken ? await this.verifySession(bearerToken) : null;
+    const explicitLocalSession = Boolean(localBearerSession?.openId.startsWith("local_"));
+    let sessionToken = explicitLocalSession ? bearerToken : cookies.get(COOKIE_NAME);
     if (!sessionToken && req.path.startsWith("/api/scheduled/")) {
       const ticket = cookies.get("app_session_id");
       const identity = await this.verifySession(ticket);
@@ -269,14 +283,9 @@ class SDKServer {
     // 2. Fallback to the Authorization header (Preview auto-login via
     //    sessionStorage), used when the browser blocks iframe cookies such as
     //    Safari ITP, private browsing, or iOS/Android WebView.
-    if (!sessionToken) {
-      const authHeader = req.headers.authorization;
-      if (typeof authHeader === "string" && authHeader.startsWith("Bearer ")) {
-        sessionToken = authHeader.slice(7);
-      }
-    }
+    if (!sessionToken) sessionToken = bearerToken;
 
-    const session = await this.verifySession(sessionToken);
+    const session = explicitLocalSession ? localBearerSession : await this.verifySession(sessionToken);
 
     if (!session) {
       throw ForbiddenError("Invalid session cookie");
@@ -315,6 +324,16 @@ class SDKServer {
 
     if (!user) {
       throw ForbiddenError("User not found");
+    }
+
+    if (session.openId.startsWith("local_")) {
+      const database = await db.getDb();
+      if (!database) throw ForbiddenError("Member session unavailable");
+      const [credential] = await database.select({ version: memberCredentials.sessionVersion })
+        .from(memberCredentials).where(eq(memberCredentials.userId, user.id)).limit(1);
+      if (!credential || session.memberSessionVersion !== credential.version) {
+        throw ForbiddenError("Member session has ended");
+      }
     }
 
     await db.upsertUser({

@@ -89,9 +89,29 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     values.role = role;
   }
 
-  await db.insert(users).values(values).onDuplicateKeyUpdate({
-    set: updateSet,
-  });
+  // A unique email is shared by local and OAuth identities. An upsert keyed by
+  // *any* unique column could otherwise update the wrong person's row when
+  // the email (rather than openId) collides. Only update by the identity key.
+  if (existing) {
+    await db.update(users).set(updateSet).where(eq(users.openId, user.openId));
+  } else {
+    if (values.email) {
+      const [emailOwner] = await db.select({ openId: users.openId }).from(users)
+        .where(sql`LOWER(${users.email}) = ${values.email.toLowerCase()}`).limit(1);
+      if (emailOwner && emailOwner.openId !== user.openId) {
+        throw new Error("This email belongs to a different Metro Pro account");
+      }
+    }
+    try {
+      await db.insert(users).values(values);
+    } catch (error) {
+      // Only a concurrent insertion of the same OAuth openId can be retried as
+      // an update. A different user's unique email must never be claimed.
+      const concurrent = await getUserByOpenId(user.openId);
+      if (!concurrent) throw error;
+      await db.update(users).set(updateSet).where(eq(users.openId, user.openId));
+    }
+  }
 
   const saved = await getUserByOpenId(user.openId);
   if (saved?.email && saved.role === "driver") {

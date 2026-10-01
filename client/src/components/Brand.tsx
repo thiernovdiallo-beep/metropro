@@ -1,4 +1,3 @@
-import { startLogin } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
@@ -34,8 +33,12 @@ export function SiteHeader() {
       setLocation("/account/settings");
       return;
     }
-    sessionStorage.setItem("metropro-member-onboarding", "1");
-    startLogin();
+    if (location !== "/") {
+      window.location.href = "/#member-sign-in";
+      return;
+    }
+    document.getElementById("member-sign-in")?.scrollIntoView({ block: "start", behavior: "smooth" });
+    document.getElementById("member-login-email")?.focus();
   };
   return (
     <header className="sticky top-0 z-40 border-b border-border/75 bg-white/95 shadow-[0_2px_16px_-12px_rgba(17,70,85,0.35)] backdrop-blur">

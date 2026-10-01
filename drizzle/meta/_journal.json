@@ -36,6 +36,20 @@
       "when": 1790843403466,
       "tag": "0004_stale_the_order",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1790865224826,
+      "tag": "0005_charming_kitty_pryde",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1790865904831,
+      "tag": "0006_motionless_absorbing_man",
+      "breakpoints": true
     }
   ]
 }

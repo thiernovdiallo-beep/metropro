@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   bookings,
@@ -7,6 +7,7 @@ import {
   departures,
   locations,
   memberships,
+  memberCredentials,
   notifications,
   passengers,
   payments,
@@ -22,6 +23,7 @@ import { hasGuestAccess } from "../services/guest-access";
 import { approvedCheckoutOrigin } from "../services/checkout-origin";
 import { getDeparture, restoreSoldSeats } from "../services/inventory";
 import { getMemberProfileStatus, saveMemberIdPhoto } from "../services/member-profile";
+import { normalizeMemberEmail } from "../services/member-auth";
 import { TEMPLATES, notify } from "../services/notifications";
 import { canSelfServeChange, getSettings } from "../services/policies";
 import { getStripe, stripeEnabled } from "../stripe/client";
@@ -155,6 +157,26 @@ export const accountRouter = router({
       .where(eq(payments.userId, ctx.user.id))
       .orderBy(desc(payments.createdAt));
   }),
+  membershipInvoices: protectedProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db || !stripeEnabled()) return [];
+    const subscriptions = await db.select({ stripeId: memberships.stripeSubscriptionId })
+      .from(memberships).where(eq(memberships.userId, ctx.user.id));
+    const pages = await Promise.all(subscriptions.filter((row): row is { stripeId: string } => Boolean(row.stripeId)).map(async ({ stripeId }) =>
+      getStripe().invoices.list({ subscription: stripeId, limit: 100 })
+    ));
+    return pages.flatMap(page => page.data)
+      .filter(invoice => invoice.status === "paid" && invoice.amount_paid > 0)
+      .map(invoice => ({
+        id: invoice.id,
+        amountCents: invoice.amount_paid,
+        currency: invoice.currency,
+        paidAt: new Date(invoice.status_transitions.paid_at
+          ? invoice.status_transitions.paid_at * 1000 : invoice.created * 1000),
+        hostedInvoiceUrl: invoice.hosted_invoice_url ?? invoice.invoice_pdf ?? null,
+      }))
+      .sort((a, b) => b.paidAt.getTime() - a.paidAt.getTime());
+  }),
   notifications: protectedProcedure.query(async ({ ctx }) => {
     const db = await getDb();
     if (!db) return [];
@@ -213,14 +235,25 @@ export const accountRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-      await db
-        .update(users)
-        .set({
-          name: input.name,
-          phone: input.phone,
-          email: input.email,
-        })
-        .where(eq(users.id, ctx.user.id));
+      const email = normalizeMemberEmail(input.email);
+      const [collision] = await db.select({ id: users.id }).from(users)
+        .where(and(sql`LOWER(${users.email}) = ${email}`, ne(users.id, ctx.user.id))).limit(1);
+      if (collision) throw new TRPCError({ code: "CONFLICT", message: "This email is already used by another account." });
+      const [credential] = await db.select({ id: memberCredentials.id }).from(memberCredentials)
+        .where(eq(memberCredentials.userId, ctx.user.id)).limit(1);
+      try {
+        await db.transaction(async tx => {
+          if (credential) await tx.update(memberCredentials).set({ emailNormalized: email })
+            .where(eq(memberCredentials.id, credential.id));
+          await tx.update(users).set({ name: input.name, phone: input.phone, email })
+            .where(eq(users.id, ctx.user.id));
+        });
+      } catch (error) {
+        if (error instanceof Error && /duplicate|unique|1062/i.test(error.message)) {
+          throw new TRPCError({ code: "CONFLICT", message: "This email is already used by another account." });
+        }
+        throw error;
+      }
       return { ok: true };
     }),
   support: protectedProcedure

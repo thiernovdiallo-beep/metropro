@@ -25,10 +25,31 @@ export const users = mysqlTable("users", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
-});
+}, table => [uniqueIndex("users_email_unique").on(table.email)]);
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+
+// Email/password sign-in is optional alongside Manus OAuth. Never expose hashes
+// through the users row or general account-profile responses.
+export const memberCredentials = mysqlTable(
+  "memberCredentials",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    emailNormalized: varchar("emailNormalized", { length: 320 }).notNull(),
+    passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
+    sessionVersion: int("sessionVersion").default(0).notNull(),
+    failedAttempts: int("failedAttempts").default(0).notNull(),
+    lockedUntil: datetime("lockedUntil", { mode: "date" }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [
+    uniqueIndex("memberCredentials_userId_unique").on(table.userId),
+    uniqueIndex("memberCredentials_email_unique").on(table.emailNormalized),
+  ]
+);
 
 // ID image ciphertext is never served through the public storage namespace.
 export const memberIdPhotos = mysqlTable("memberIdPhotos", {

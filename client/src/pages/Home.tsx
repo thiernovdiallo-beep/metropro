@@ -6,13 +6,15 @@ import { Label } from "@/components/ui/label";
 import { isoDate, money } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { ArrowRightLeft, IdCard } from "lucide-react";
+import { ArrowRightLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 
 export default function Home() {
   const [, setLocation] = useLocation();
   const { isAuthenticated } = useAuth();
+  const utils = trpc.useUtils();
+  const signIn = trpc.memberAuth.signIn.useMutation();
   const citiesQuery = trpc.public.cities.useQuery();
   const settingsQuery = trpc.public.settings.useQuery();
   const cities = citiesQuery.data ?? [];
@@ -24,6 +26,9 @@ export default function Home() {
   const [departDate, setDepartDate] = useState(isoDate());
   const [returnDate, setReturnDate] = useState(isoDate(new Date(Date.now() + 86400000 * 2)));
   const [passengers, setPassengers] = useState(1);
+  const [memberEmail, setMemberEmail] = useState("");
+  const [memberPassword, setMemberPassword] = useState("");
+  const [memberError, setMemberError] = useState("");
 
   const origin = originId ?? nyc?.id ?? 0;
   const dest = destId ?? cmh?.id ?? 0;
@@ -62,15 +67,34 @@ export default function Home() {
   }, [isAuthenticated, setLocation]);
 
   useEffect(() => {
-    if (window.location.hash === "#trip-search") {
-      document.getElementById("trip-search")?.scrollIntoView({ block: "start" });
+    const target = window.location.hash.slice(1);
+    if (target === "trip-search" || target === "member-sign-in") {
+      document.getElementById(target)?.scrollIntoView({ block: "start" });
     }
   }, []);
 
-  function memberEntry() {
-    if (isAuthenticated) { setLocation("/account/settings"); return; }
+  function existingManusEntry() {
     sessionStorage.setItem("metropro-member-onboarding", "1");
     startLogin();
+  }
+
+  async function submitMemberSignIn(event: React.FormEvent) {
+    event.preventDefault();
+    setMemberError("");
+    try {
+      const result = await signIn.mutateAsync({ email: memberEmail, password: memberPassword });
+      sessionStorage.setItem("metropro-member-session", result.sessionToken);
+      sessionStorage.removeItem("manus-cookie");
+      setMemberPassword("");
+      await Promise.all([
+        utils.auth.me.invalidate(),
+        utils.account.memberProfile.invalidate(),
+        utils.account.overview.invalidate(),
+      ]);
+      setLocation("/account");
+    } catch (error) {
+      setMemberError(error instanceof Error ? error.message : "Could not sign in. Please try again.");
+    }
   }
 
   return (
@@ -91,20 +115,26 @@ export default function Home() {
               and one front passenger seat at {money(front)}. A traveling member pays {money(member)}{" "}
               for their own regular seat.
             </p>
-            <div className="mt-8 flex min-w-0 flex-col gap-4 rounded-2xl border border-[#badfdf] bg-white/85 p-5 shadow-sm xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex min-w-0 items-start gap-3">
-                <IdCard className="mt-0.5 h-6 w-6 shrink-0 text-primary" aria-hidden="true" />
-                <div className="min-w-0">
-                  <h2 className="font-serif text-xl">Interested in membership?</h2>
-                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                    Add your name, email, phone and ID photo to your profile, then join for $25/month.
-                  </p>
-                </div>
+            <form id="member-sign-in" onSubmit={submitMemberSignIn} className="mt-8 grid min-w-0 scroll-mt-24 gap-3 rounded-2xl border border-[#badfdf] bg-white/90 p-5 shadow-sm sm:p-6">
+              <h2 className="font-serif text-2xl">Member sign in</h2>
+              <p className="text-sm leading-relaxed text-muted-foreground">Enter your email and password to access your trips, tickets and membership.</p>
+              <div className="form-field">
+                <Label htmlFor="member-login-email">Email</Label>
+                <Input id="member-login-email" type="email" autoComplete="email" className="h-12 bg-white" value={memberEmail} onChange={event => setMemberEmail(event.target.value)} required />
               </div>
-              <Button type="button" variant="outline" className="min-h-11 w-full shrink-0 xl:w-auto" onClick={memberEntry}>
-                {isAuthenticated ? "My member profile" : "Log in / Create profile"}
-              </Button>
-            </div>
+              <div className="form-field">
+                <Label htmlFor="member-login-password">Password</Label>
+                <Input id="member-login-password" type="password" autoComplete="current-password" className="h-12 bg-white" value={memberPassword} onChange={event => setMemberPassword(event.target.value)} required />
+              </div>
+              {memberError ? <p role="alert" className="text-sm font-medium text-destructive">{memberError}</p> : null}
+              <Button type="submit" className="mt-1 h-12 w-full" disabled={signIn.isPending}>{signIn.isPending ? "Signing in…" : "Access my account"}</Button>
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                <Link href="/create-account" className="font-semibold text-primary underline">Create a member account</Link>
+                <span className="text-muted-foreground">· Account creation is free.</span>
+              </div>
+              <button type="button" onClick={existingManusEntry} className="w-fit text-left text-xs font-medium text-muted-foreground underline hover:text-primary">Already used Manus sign-in? Continue with Manus</button>
+              {isAuthenticated ? <Link href="/account" className="text-xs font-semibold text-primary underline">Already signed in? Open my account</Link> : null}
+            </form>
           </div>
           <form id="trip-search" onSubmit={search} className="ticket-card min-w-0 scroll-mt-24 p-5 text-foreground sm:p-7">
             <h2 className="font-serif text-xl">Plan your trip</h2>

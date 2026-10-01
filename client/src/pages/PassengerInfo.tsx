@@ -2,7 +2,6 @@ import { PageShell } from "@/components/Brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { startLogin } from "@/const";
 import { money } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -96,7 +95,7 @@ export default function PassengerInfo() {
         {!isAuthenticated ? (
           <div className="mt-6 rounded-xl border border-primary/20 bg-secondary p-4 text-sm">
             <strong>Booking as a guest.</strong> No sign-in or ID photo is needed. Enter your contact details and save your private ticket link after payment.
-            <button type="button" className="ml-1 font-semibold text-primary underline" onClick={() => { sessionStorage.setItem("metropro-member-onboarding", "1"); startLogin(); }}>Member sign in</button>
+            <a href="/#member-sign-in" className="ml-1 font-semibold text-primary underline">Member sign in</a>
           </div>
         ) : overview.data?.membership && !overview.data.memberFareEligible ? (
           <div className="mt-6 rounded-xl border border-primary/20 bg-secondary p-4 text-sm">

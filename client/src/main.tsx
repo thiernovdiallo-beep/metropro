@@ -17,8 +17,8 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
 
   if (!isUnauthorized) return;
-
-  startLogin();
+  if (/^\/(admin|driver)(\/|$)/.test(window.location.pathname)) startLogin();
+  else window.location.href = "/#member-sign-in";
 };
 
 queryClient.getQueryCache().subscribe(event => {
@@ -43,6 +43,12 @@ const trpcClient = trpc.createClient({
       url: "/api/trpc",
       transformer: superjson,
       headers() {
+        try {
+          const memberToken = sessionStorage.getItem("metropro-member-session");
+          if (memberToken) return { Authorization: `Bearer ${memberToken}` };
+        } catch {
+          // Fall back to the existing OAuth session or a secure cookie.
+        }
         // Preview auto-login fallback: when the browser blocks iframe cookies
         // (Safari ITP / private browsing / WebView), the runtime mirrors the
         // session into sessionStorage so we can forward it as a Bearer token.

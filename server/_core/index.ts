@@ -17,7 +17,7 @@ async function startServer() {
   const server = createServer(app);
 
   app.use((req, res, next) => {
-    if (/^\/(confirmation|ticket|checkout|book|account|driver|admin)(\/|$)/.test(req.path)) {
+    if (/^\/(confirmation|ticket|checkout|book|account|create-account|driver|admin)(\/|$)/.test(req.path)) {
       res.set("Cache-Control", "private, no-store, max-age=0");
       res.set("Referrer-Policy", "no-referrer");
       res.set("X-Robots-Tag", "noindex, nofollow, noarchive");

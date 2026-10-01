@@ -219,6 +219,7 @@ export async function upsertMembershipFromSubscription(opts: {
     });
   }
 
+  let activatedByCheckout = false;
   if (opts.status === "active" && opts.checkoutSessionId) {
     const [existingPay] = await db.select().from(payments).where(eq(payments.stripeCheckoutSessionId, opts.checkoutSessionId)).limit(1);
     if (!existingPay) {
@@ -230,18 +231,19 @@ export async function upsertMembershipFromSubscription(opts: {
         status: "succeeded",
         stripeCheckoutSessionId: opts.checkoutSessionId,
       });
+      activatedByCheckout = true;
     }
   }
 
-  if (opts.status === "active") {
+  if (activatedByCheckout) {
     await notify({
       userId: opts.userId,
       templateKey: TEMPLATES.membership_renewal,
-      title: "Metro Pro Member",
-      body: "Your Metro Pro Member subscription is active. Your own regular seat is $100; the front seat remains $200.",
+      title: "Membership activated",
+      body: `Your $${(opts.priceCents / 100).toFixed(2)}/month Metro Pro Member subscription is active. Stripe automatically charges each month until you cancel. Your own regular seat is $100; the front seat remains $200.`,
     });
   }
-  if (opts.status === "past_due" || opts.status === "unpaid") {
+  if ((opts.status === "past_due" || opts.status === "unpaid") && existing?.status !== opts.status) {
     await notify({
       userId: opts.userId,
       templateKey: TEMPLATES.membership_payment_failed,

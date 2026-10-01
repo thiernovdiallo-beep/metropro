@@ -2,7 +2,7 @@ import { PageShell } from "@/components/Brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { COOKIE_NAME, startLogin } from "@/const";
+import { COOKIE_NAME } from "@/const";
 import { formatDate, formatTime, moneyExact } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -32,9 +32,7 @@ export default function Account() {
       <PageShell>
         <div className="container py-16">
           <h1 className="font-serif text-3xl">Your trips</h1>
-          <Button className="mt-4" onClick={() => startLogin()}>
-            Member sign in
-          </Button>
+          <a href="/#member-sign-in"><Button className="mt-4">Member sign in</Button></a>
           <a href="/#trip-search" className="ml-2 mt-4 inline-flex min-h-10 items-center rounded-lg border border-primary/40 px-4 text-sm font-semibold text-primary">Book without an account</a>
         </div>
       </PageShell>
@@ -149,11 +147,18 @@ function MembershipPanel() {
   const profile = trpc.account.memberProfile.useQuery();
   const settings = trpc.public.settings.useQuery();
   const start = trpc.account.startMembershipCheckout.useMutation();
+  const [agreed, setAgreed] = useState(false);
+  const monthlyPrice = moneyExact(settings.data?.membershipPriceCents ?? 2500);
   return (
     <div>
       <h1 className="font-serif text-3xl">Membership</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         Status: {overview.data?.membership?.status ?? "None"}
+      </p>
+      <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground">
+        Metro Pro Member is a {monthlyPrice}-per-month subscription. Once you join through Stripe,
+        your payment method is charged now and automatically each month until you cancel.
+        Account creation alone does not start the subscription.
       </p>
       <ul className="mt-4 list-disc pl-5 text-sm">
         {(settings.data?.membershipBenefits ?? []).map(b => (
@@ -167,23 +172,24 @@ function MembershipPanel() {
         </div>
       ) : null}
       {overview.data?.membership?.status === "active" ? (
-        <Link href="/account/payments"><Button className="mt-6">Manage membership billing</Button></Link>
-      ) : profile.data?.complete ? <Button
-        className="mt-6"
-        onClick={async () => {
+        <Link href="/account/payments"><Button className="mt-6">Manage or cancel membership billing</Button></Link>
+      ) : profile.data?.complete ? <div className="mt-6 max-w-lg">
+        <label className="flex items-start gap-3 rounded-xl border border-border bg-secondary p-4 text-sm leading-relaxed">
+          <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-primary" checked={agreed} onChange={event => setAgreed(event.target.checked)} />
+          <span>I understand that joining authorizes an automatic {monthlyPrice} charge every month until I cancel.</span>
+        </label>
+        <Button className="mt-4" disabled={!agreed || start.isPending} onClick={async () => {
           try {
-            const r = await start.mutateAsync({ origin: window.location.origin });
-            if (r.checkoutUrl) {
-              toast.message("Opening Stripe Checkout in a new tab.");
-              window.open(r.checkoutUrl, "_blank");
+            const result = await start.mutateAsync({ origin: window.location.origin });
+            if (result.checkoutUrl) {
+              toast.message("Opening Stripe subscription checkout in a new tab.");
+              if (!window.open(result.checkoutUrl, "_blank")) window.location.assign(result.checkoutUrl);
             }
           } catch (error) {
             toast.error(error instanceof Error ? error.message : "Could not start membership checkout");
           }
-        }}
-      >
-        Become a Member · {moneyExact(settings.data?.membershipPriceCents ?? 2500)}/mo
-      </Button> : null}
+        }}>Subscribe for {monthlyPrice}/month</Button>
+      </div> : null}
     </div>
   );
 }
@@ -232,7 +238,8 @@ function Payments() {
     <div>
       <h1 className="font-serif text-3xl">Payment methods</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Cards are stored with Stripe, never in Metro Pro.
+        Cards are stored with Stripe, never in Metro Pro. Use the Stripe portal to manage
+        or cancel your automatic monthly membership subscription.
       </p>
       <Button
         className="mt-4"
@@ -253,11 +260,31 @@ function Payments() {
 
 function Receipts() {
   const q = trpc.account.receipts.useQuery();
+  const invoices = trpc.account.membershipInvoices.useQuery(undefined, { retry: false });
+  const localPayments = (q.data ?? []).filter(payment =>
+    payment.kind !== "membership" || !invoices.data?.length
+  );
   return (
     <div>
       <h1 className="font-serif text-3xl">Receipts</h1>
+      {invoices.data?.length ? <div className="mt-5">
+        <h2 className="font-serif text-xl">Monthly membership invoices</h2>
+        <div className="mt-3 grid gap-2">
+          {invoices.data.map(invoice => (
+            <div key={invoice.id} className="ticket-card flex flex-wrap items-center justify-between gap-2 p-4 text-sm">
+              <span>Stripe subscription payment · {formatDate(invoice.paidAt)}</span>
+              <span>{moneyExact(invoice.amountCents)}</span>
+              {invoice.hostedInvoiceUrl ? (
+                <a href={invoice.hostedInvoiceUrl} target="_blank" rel="noreferrer" className="font-semibold text-primary underline">View paid invoice</a>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </div> : null}
+      {invoices.error ? <p className="mt-4 text-sm text-muted-foreground">Stripe invoice history is temporarily unavailable. Open Payment methods to view your subscription in Stripe.</p> : null}
+      {localPayments.length ? <h2 className="mt-6 font-serif text-xl">Booking and local payment records</h2> : null}
       <div className="mt-4 grid gap-2">
-        {(q.data ?? []).map(p => (
+        {localPayments.map(p => (
           <div key={p.id} className="ticket-card flex flex-wrap items-center justify-between gap-2 p-4 text-sm">
             <span className="capitalize">
               {p.kind} · {p.status}
@@ -355,9 +382,12 @@ function Settings({
     try {
       let token: string | undefined;
       try {
-        const raw = sessionStorage.getItem("manus-cookie") ?? "";
-        token = raw.split(";").find(part => part.trim().startsWith(`${COOKIE_NAME}=`))?.trim().slice(COOKIE_NAME.length + 1);
-      } catch { /* OAuth cookie may be available even without sessionStorage. */ }
+        token = sessionStorage.getItem("metropro-member-session") ?? undefined;
+        if (!token) {
+          const raw = sessionStorage.getItem("manus-cookie") ?? "";
+          token = raw.split(";").find(part => part.trim().startsWith(`${COOKIE_NAME}=`))?.trim().slice(COOKIE_NAME.length + 1);
+        }
+      } catch { /* A secure cookie may still be available without sessionStorage. */ }
       const response = await fetch(`/api/member-id/${userId}`, {
         credentials: "include",
         headers: token ? { Authorization: `Bearer ${token}` } : {},

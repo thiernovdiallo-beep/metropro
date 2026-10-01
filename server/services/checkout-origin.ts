@@ -21,3 +21,10 @@ export function approvedCheckoutOrigin(input: string, requestOrigin?: string) {
   }
   return parsed.origin;
 }
+
+export function assertMemberAuthOrigin(requestOrigin?: string) {
+  // Login and sign-up use cross-site-capable cookies in embedded Preview. Do not
+  // allow a form on a different website to create or replace a member session.
+  if (!requestOrigin) throw new TRPCError({ code: "FORBIDDEN", message: "Open Metro Pro to sign in" });
+  return approvedCheckoutOrigin(requestOrigin, requestOrigin);
+}

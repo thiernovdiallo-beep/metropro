@@ -1,6 +1,7 @@
 {
   "routes": [
     { "path": "/", "title": "Metro Pro · Member login or guest booking" },
+    { "path": "/create-account", "title": "Create a Metro Pro member account" },
     { "path": "/search", "title": "Departures" },
     { "path": "/book", "title": "Passenger information" },
     { "path": "/checkout", "title": "Checkout" },
@@ -8,6 +9,7 @@
     { "path": "/ticket/:token", "title": "Digital ticket" },
     { "path": "/membership", "title": "Metro Pro Member" },
     { "path": "/account", "title": "My trips" },
+    { "path": "/account/past", "title": "Previous trips" },
     { "path": "/account/tickets", "title": "Digital tickets" },
     { "path": "/account/membership", "title": "Membership" },
     { "path": "/account/passengers", "title": "Saved passengers" },
