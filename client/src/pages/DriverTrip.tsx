@@ -88,7 +88,7 @@ export default function DriverTrip() {
         <div className="ticket-card mt-6 p-4">
           <div className="font-semibold">Scan passenger QR</div>
           <video ref={videoRef} className="mt-2 max-h-48 w-full rounded-md bg-primary/10" />
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
             <Button type="button" variant="outline" onClick={startCamera}>
               Open camera
             </Button>
@@ -105,10 +105,10 @@ export default function DriverTrip() {
                   {p.firstName} {p.lastName}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {p.bookingNumber} · {p.phone} · {p.status.replace("_", " ")}
+                  {p.bookingNumber} · {p.phone} · {p.status.replace("_", " ")} · {p.seatType === "front" ? "Front seat" : "Regular seat"}
                 </div>
               </div>
-              <div className="flex gap-1">
+              <div className="flex flex-wrap gap-1">
                 <Button size="sm" onClick={() => setStatus.mutate({ passengerId: p.id, departureId: id, status: "checked_in" })}>
                   Check in
                 </Button>

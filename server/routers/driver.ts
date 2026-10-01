@@ -134,6 +134,7 @@ export const driverRouter = router({
           bookingNumber: b.bookingNumber,
           qrToken: t.qrToken,
           ticketId: t.id,
+          seatType: t.seatType,
         });
       }
       return { ...bundle, manifest };

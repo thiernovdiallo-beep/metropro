@@ -22,6 +22,7 @@ import { getDb, writeAudit } from "../db";
 import { getAnalytics, getOpsKpis } from "../services/analytics";
 import { assertVehicleAssignable } from "../services/dispatch";
 import { restoreSoldSeats } from "../services/inventory";
+import { allocatePaidAcrossLegs } from "../services/pricing";
 import { TEMPLATES, notify } from "../services/notifications";
 import { DEFAULT_SETTINGS, getSettings, saveSettings, type AppSettings } from "../services/policies";
 import { getStripe, stripeEnabled } from "../stripe/client";
@@ -50,8 +51,8 @@ async function tripDetail(dep: typeof departures.$inferSelect) {
   const revenue = tripBookings
     .filter(b => b.status === "confirmed")
     .reduce((s, b) => {
-      const legs = b.returnDepartureId ? 2 : 1;
-      return s + Math.round(b.amountCents / legs);
+      const paid = allocatePaidAcrossLegs(b.amountCents, b.outboundQuotedCents, b.returnQuotedCents);
+      return s + (b.outboundDepartureId === dep.id ? paid.outboundCents : paid.returnCents);
     }, 0);
   const pax = [];
   for (const b of tripBookings) {
@@ -62,6 +63,7 @@ async function tripDetail(dep: typeof departures.$inferSelect) {
         bookingNumber: b.bookingNumber,
         paymentStatus: b.status,
         contactPhone: b.contactPhone,
+        seatType: b.outboundDepartureId === dep.id ? p.outboundSeatType : p.returnSeatType ?? "standard",
       }))
     );
   }
@@ -353,6 +355,7 @@ export const adminRouter = router({
         estimatedMinutes: z.number(),
         standardFareCents: z.number(),
         memberFareCents: z.number(),
+        frontFareCents: z.number(),
         isActive: z.boolean(),
       })
     )
@@ -470,9 +473,9 @@ export const adminRouter = router({
           await db.update(payments).set({ status: "refunded" }).where(eq(payments.id, pay.id));
         }
       }
-      await restoreSoldSeats(booking.outboundDepartureId, booking.passengerCount);
+      await restoreSoldSeats(booking.outboundDepartureId, booking.passengerCount, booking.outboundFrontSeats);
       if (booking.returnDepartureId) {
-        await restoreSoldSeats(booking.returnDepartureId, booking.passengerCount);
+        await restoreSoldSeats(booking.returnDepartureId, booking.passengerCount, booking.returnFrontSeats);
       }
       await db.update(bookings).set({ status: "refunded" }).where(eq(bookings.id, booking.id));
       await db.update(tickets).set({ status: "voided" }).where(eq(tickets.bookingId, booking.id));

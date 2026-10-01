@@ -46,63 +46,73 @@
 }
 
 :root {
-  --radius: 0.85rem;
-  --background: #f6f1e8;
-  --foreground: #0b1f3a;
-  --card: #fffdf8;
-  --card-foreground: #0b1f3a;
-  --popover: #fffdf8;
-  --popover-foreground: #0b1f3a;
-  --primary: #0b1f3a;
-  --primary-foreground: #f6f1e8;
-  --secondary: #efe6d6;
-  --secondary-foreground: #10243f;
-  --muted: #efe6d6;
-  --muted-foreground: #5b6573;
-  --accent: #c47a3a;
-  --accent-foreground: #fffdf8;
-  --destructive: #9b2c2c;
-  --destructive-foreground: #fffdf8;
-  --border: #d9d1c4;
-  --input: #d9d1c4;
-  --ring: #c47a3a;
-  --chart-1: #0b1f3a;
-  --chart-2: #c47a3a;
-  --chart-3: #2f6f4e;
-  --chart-4: #5b6573;
-  --chart-5: #9b2c2c;
-  --sidebar: #0b1f3a;
-  --sidebar-foreground: #f6f1e8;
-  --sidebar-primary: #c47a3a;
-  --sidebar-primary-foreground: #fffdf8;
-  --sidebar-accent: #163056;
-  --sidebar-accent-foreground: #f6f1e8;
-  --sidebar-border: #1d355c;
-  --sidebar-ring: #c47a3a;
+  --radius: 0.9rem;
+  --background: #f3fafd;
+  --foreground: #17384a;
+  --card: #ffffff;
+  --card-foreground: #17384a;
+  --popover: #ffffff;
+  --popover-foreground: #17384a;
+  --primary: #137a86;
+  --primary-foreground: #ffffff;
+  --secondary: #e7f4f3;
+  --secondary-foreground: #174554;
+  --muted: #edf5f8;
+  --muted-foreground: #536c78;
+  --accent: #137a86;
+  --accent-foreground: #ffffff;
+  --destructive: #a33e43;
+  --destructive-foreground: #ffffff;
+  --border: #cfe1e8;
+  --input: #bed4dd;
+  --ring: #2a95a0;
+  --chart-1: #137a86;
+  --chart-2: #e09a5b;
+  --chart-3: #4d8c73;
+  --chart-4: #446b8c;
+  --chart-5: #a33e43;
+  --sidebar: #ecf6f8;
+  --sidebar-foreground: #17384a;
+  --sidebar-primary: #137a86;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #d9eeef;
+  --sidebar-accent-foreground: #17384a;
+  --sidebar-border: #cfe1e8;
+  --sidebar-ring: #2a95a0;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    box-sizing: border-box;
   }
+  html { min-width: 280px; }
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans);
   }
-  h1, h2, .font-serif {
-    font-family: var(--font-serif);
+  h1, h2, .font-serif { font-family: var(--font-serif); }
+  input, select, textarea {
+    min-width: 0;
+    max-width: 100%;
+    font-family: inherit;
   }
+  input[type="date"], input[type="datetime-local"] {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  label { line-height: 1.35; }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
   [type="button"]:not(:disabled),
   [type="submit"]:not(:disabled),
   [type="reset"]:not(:disabled),
-  a[href],
-  select:not(:disabled),
+  a[href], select:not(:disabled),
   input[type="checkbox"]:not(:disabled),
-  input[type="radio"]:not(:disabled) {
-    @apply cursor-pointer;
-  }
+  input[type="radio"]:not(:disabled) { @apply cursor-pointer; }
 }
 
 @layer components {
@@ -113,40 +123,30 @@
     padding-left: 1rem;
     padding-right: 1rem;
   }
-  .flex {
-    min-height: 0;
-    min-width: 0;
-  }
+  .flex { min-height: 0; min-width: 0; }
   @media (min-width: 640px) {
-    .container {
-      padding-left: 1.5rem;
-      padding-right: 1.5rem;
-    }
+    .container { padding-left: 1.5rem; padding-right: 1.5rem; }
   }
   @media (min-width: 1024px) {
-    .container {
-      padding-left: 2rem;
-      padding-right: 2rem;
-      max-width: 1280px;
-    }
+    .container { padding-left: 2rem; padding-right: 2rem; max-width: 1280px; }
   }
   .ticket-card {
-    background: #fffdf8;
-    border: 1px solid #d9d1c4;
-    border-radius: 1rem;
-    box-shadow: 0 10px 30px -24px #0b1f3a;
+    background: #ffffff;
+    border: 1px solid #d5e7eb;
+    border-radius: 1.1rem;
+    box-shadow: 0 18px 45px -31px rgba(27, 81, 101, 0.35), 0 3px 12px -8px rgba(20, 80, 94, 0.18);
   }
-  .price-copper {
-    color: #c47a3a;
-    font-variant-numeric: tabular-nums;
-  }
+  .price-copper { color: #0f7380; font-variant-numeric: tabular-nums; }
   .stamp-soldout {
-    letter-spacing: 0.18em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: #9b2c2c;
-    border: 2px solid #9b2c2c;
-    padding: 0.2rem 0.55rem;
+    color: #a33e43;
+    border: 2px solid #a33e43;
+    border-radius: 0.35rem;
+    padding: 0.25rem 0.5rem;
     font-weight: 700;
     font-size: 0.72rem;
   }
+  .form-field { min-width: 0; display: grid; gap: 0.5rem; }
+  .form-field input, .form-field select, .form-field textarea { width: 100%; }
 }

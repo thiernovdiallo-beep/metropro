@@ -53,6 +53,7 @@ export default function SearchResults() {
         <p className="mt-1 text-muted-foreground">
           {pax} passenger{pax > 1 ? "s" : ""} · {type === "round_trip" ? "Round trip" : "One-way"}
         </p>
+        <p className="mt-2 text-sm text-muted-foreground">Nine regular seats and one front seat per van. Select each seat for your passengers on the next screen.</p>
         <h2 className="mt-8 font-serif text-xl">Outbound · {date ? formatDate(date) : ""}</h2>
         <div className="mt-4 grid gap-3">
           {(outbound.data ?? []).map(d => (
@@ -115,9 +116,12 @@ function DepartureCard({
     departAt: Date;
     arriveAt: Date;
     seatsRemaining: number;
+    standardSeatsRemaining: number;
+    frontSeatAvailable: boolean;
     soldOut: boolean;
     standardFareCents: number;
     memberFareCents: number;
+    frontFareCents: number;
     pickup?: { label: string } | null;
     dropoff?: { label: string } | null;
     origin?: { name: string } | null;
@@ -154,13 +158,13 @@ function DepartureCard({
             <span className="stamp-soldout">Sold out</span>
           ) : (
             <>
-              <div className="text-xs text-muted-foreground">{d.seatsRemaining} seats left</div>
-              <div className="text-sm text-muted-foreground line-through">{money(d.standardFareCents)}</div>
+              <div className="text-xs text-muted-foreground">{d.standardSeatsRemaining} regular · {d.frontSeatAvailable ? 1 : 0} front left</div>
               <div className="price-copper text-2xl font-semibold">
-                {money(isMember ? d.memberFareCents : d.standardFareCents)}
+                From {money(d.standardSeatsRemaining > 0 ? (isMember ? d.memberFareCents : d.standardFareCents) : d.frontFareCents)}
               </div>
-              <div className="text-xs text-muted-foreground">
-                Member {money(d.memberFareCents)} · {pax} pax
+              <div className="text-xs leading-relaxed text-muted-foreground">
+                Regular {money(d.standardFareCents)} · Front {money(d.frontFareCents)}<br />
+                Member's own regular seat {money(d.memberFareCents)}
               </div>
             </>
           )}

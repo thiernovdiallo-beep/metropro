@@ -8,7 +8,7 @@ import {
   vehicles,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { remainingSeats } from "../services/inventory";
+import { remainingSeats, seatAvailability } from "../services/inventory";
 import { getSettings } from "../services/policies";
 import { publicProcedure, router } from "../_core/trpc";
 
@@ -23,6 +23,7 @@ export const publicRouter = router({
     return {
       standardFareCents: s.standardFareCents,
       memberFareCents: s.memberFareCents,
+      frontFareCents: s.frontFareCents,
       membershipPriceCents: s.membershipPriceCents,
       membershipBenefits: s.membershipBenefits,
       emergencyContactRequired: s.emergencyContactRequired,
@@ -46,6 +47,14 @@ export const publicRouter = router({
       dropoff: locMap.get(r.dropoffLocationId)!,
     }));
   }),
+  seatOptions: publicProcedure
+    .input(z.object({ departureId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const [departure] = await db.select().from(departures).where(eq(departures.id, input.departureId)).limit(1);
+      return departure ? seatAvailability(departure) : null;
+    }),
   search: publicProcedure
     .input(
       z.object({
@@ -97,6 +106,7 @@ export const publicRouter = router({
         .filter(d => d.status !== "canceled" && d.status !== "completed")
         .map(d => {
           const left = remainingSeats(d.capacity, d.seatsSold, d.seatsHeld);
+          const seats = seatAvailability(d);
           const early =
             d.memberEarlyAccessAt && d.memberEarlyAccessAt > now && !input.isMember;
           return {
@@ -107,10 +117,13 @@ export const publicRouter = router({
             seatsSold: d.seatsSold,
             seatsHeld: d.seatsHeld,
             seatsRemaining: left,
+            standardSeatsRemaining: seats.standard,
+            frontSeatAvailable: seats.front > 0,
             soldOut: left < input.passengers || d.status === "canceled" || Boolean(early),
             memberEarlyAccess: Boolean(early),
             standardFareCents: rs.standardFareCents,
             memberFareCents: rs.memberFareCents,
+            frontFareCents: rs.frontFareCents,
             pickup: locMap.get(rs.pickupLocationId),
             dropoff: locMap.get(rs.dropoffLocationId),
             origin: cityMap.get(rs.originCityId),

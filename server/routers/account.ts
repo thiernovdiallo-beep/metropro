@@ -261,9 +261,9 @@ export const accountRouter = router({
           await db.update(payments).set({ status: "refunded" }).where(eq(payments.id, pay.id));
         }
       }
-      await restoreSoldSeats(booking.outboundDepartureId, booking.passengerCount);
+      await restoreSoldSeats(booking.outboundDepartureId, booking.passengerCount, booking.outboundFrontSeats);
       if (booking.returnDepartureId) {
-        await restoreSoldSeats(booking.returnDepartureId, booking.passengerCount);
+        await restoreSoldSeats(booking.returnDepartureId, booking.passengerCount, booking.returnFrontSeats);
       }
       await db
         .update(bookings)
@@ -299,6 +299,16 @@ export const accountRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       const [booking] = await db.select().from(bookings).where(eq(bookings.id, input.bookingId)).limit(1);
       if (!booking || booking.userId !== ctx.user.id) throw new TRPCError({ code: "NOT_FOUND" });
+      if (booking.status !== "confirmed") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Only confirmed bookings can be rescheduled." });
+      }
+      if (Boolean(input.newReturnDepartureId) !== Boolean(booking.returnDepartureId)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Reschedule each booked leg; contact support to change a round trip." });
+      }
+      if (input.newOutboundDepartureId === booking.outboundDepartureId ||
+          (input.newReturnDepartureId && input.newReturnDepartureId === booking.returnDepartureId)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Choose new departures for each leg." });
+      }
       const dep = await getDeparture(booking.outboundDepartureId);
       const settings = await getSettings();
       if (!dep || !canSelfServeChange(dep.departAt, settings.cancelCutoffHours)) {
@@ -307,40 +317,58 @@ export const accountRouter = router({
           message: "This trip is not eligible for self-serve reschedule.",
         });
       }
+      const replacementOut = await getDeparture(input.newOutboundDepartureId);
+      if (!replacementOut || replacementOut.routeId !== dep.routeId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Reschedule within your originally booked route only." });
+      }
+      if (booking.returnDepartureId && input.newReturnDepartureId) {
+        const oldReturn = await getDeparture(booking.returnDepartureId);
+        const replacementReturn = await getDeparture(input.newReturnDepartureId);
+        if (!oldReturn || !replacementReturn || replacementReturn.routeId !== oldReturn.routeId ||
+            replacementReturn.departAt <= replacementOut.arriveAt) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Choose a later return on your originally booked return route." });
+        }
+      }
       const membership = await getActiveMembership(ctx.user.id);
       const useFree = Boolean(membership && membership.freeReschedulesRemaining > 0);
-      const { holdSeats, convertHoldsToSold } = await import("../services/inventory");
+      const { holdSeats, convertHoldsToSold, releaseHolds } = await import("../services/inventory");
       const { assertBookable } = await import("../services/inventory");
-      await assertBookable(input.newOutboundDepartureId, booking.passengerCount, Boolean(membership));
+      await assertBookable(input.newOutboundDepartureId, booking.passengerCount, Boolean(membership), booking.outboundFrontSeats);
       if (input.newReturnDepartureId) {
-        await assertBookable(input.newReturnDepartureId, booking.passengerCount, Boolean(membership));
+        await assertBookable(input.newReturnDepartureId, booking.passengerCount, Boolean(membership), booking.returnFrontSeats);
       }
       let heldOut = false;
       let heldRet = false;
+      let soldOut = false;
+      let soldRet = false;
       try {
-        await holdSeats(input.newOutboundDepartureId, booking.passengerCount);
+        await holdSeats(input.newOutboundDepartureId, booking.passengerCount, booking.outboundFrontSeats);
         heldOut = true;
-        await convertHoldsToSold(input.newOutboundDepartureId, booking.passengerCount);
         if (input.newReturnDepartureId) {
-          await holdSeats(input.newReturnDepartureId, booking.passengerCount);
+          await holdSeats(input.newReturnDepartureId, booking.passengerCount, booking.returnFrontSeats);
           heldRet = true;
-          await convertHoldsToSold(input.newReturnDepartureId, booking.passengerCount);
+        }
+        await convertHoldsToSold(input.newOutboundDepartureId, booking.passengerCount, booking.outboundFrontSeats);
+        heldOut = false;
+        soldOut = true;
+        if (input.newReturnDepartureId) {
+          await convertHoldsToSold(input.newReturnDepartureId, booking.passengerCount, booking.returnFrontSeats);
+          heldRet = false;
+          soldRet = true;
         }
       } catch (error) {
-        if (heldOut) {
-          await restoreSoldSeats(input.newOutboundDepartureId, booking.passengerCount);
-        }
-        if (heldRet && input.newReturnDepartureId) {
-          await restoreSoldSeats(input.newReturnDepartureId, booking.passengerCount);
-        }
+        if (heldOut) await releaseHolds(input.newOutboundDepartureId, booking.passengerCount, booking.outboundFrontSeats);
+        if (heldRet && input.newReturnDepartureId) await releaseHolds(input.newReturnDepartureId, booking.passengerCount, booking.returnFrontSeats);
+        if (soldOut) await restoreSoldSeats(input.newOutboundDepartureId, booking.passengerCount, booking.outboundFrontSeats);
+        if (soldRet && input.newReturnDepartureId) await restoreSoldSeats(input.newReturnDepartureId, booking.passengerCount, booking.returnFrontSeats);
         throw new TRPCError({
           code: "CONFLICT",
           message: error instanceof Error ? error.message : "SOLD OUT",
         });
       }
-      await restoreSoldSeats(booking.outboundDepartureId, booking.passengerCount);
+      await restoreSoldSeats(booking.outboundDepartureId, booking.passengerCount, booking.outboundFrontSeats);
       if (booking.returnDepartureId) {
-        await restoreSoldSeats(booking.returnDepartureId, booking.passengerCount);
+        await restoreSoldSeats(booking.returnDepartureId, booking.passengerCount, booking.returnFrontSeats);
       }
       await db
         .update(bookings)
@@ -363,6 +391,9 @@ export const accountRouter = router({
             bookingId: booking.id,
             departureId,
             qrToken: makeQrToken(),
+            seatType: departureId === input.newOutboundDepartureId
+              ? passenger.outboundSeatType
+              : passenger.returnSeatType ?? "standard",
             status: "booked",
           });
         }
@@ -385,6 +416,9 @@ export const accountRouter = router({
   startMembershipCheckout: protectedProcedure
     .input(z.object({ origin: z.string().url() }))
     .mutation(async ({ ctx, input }) => {
+      if (await getActiveMembership(ctx.user.id)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Your membership is already active. Manage it in your account." });
+      }
       if (!stripeEnabled()) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Payments are not configured" });
       }

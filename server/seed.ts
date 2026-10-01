@@ -78,7 +78,8 @@ export async function ensureSeed() {
         dropoffLocationId: cmhPickup.id,
         estimatedMinutes: 540,
         standardFareCents: 15000,
-        memberFareCents: 12500,
+        memberFareCents: 10000,
+        frontFareCents: 20000,
         isActive: true,
       },
       {
@@ -88,7 +89,8 @@ export async function ensureSeed() {
         dropoffLocationId: nycPickup.id,
         estimatedMinutes: 540,
         standardFareCents: 15000,
-        memberFareCents: 12500,
+        memberFareCents: 10000,
+        frontFareCents: 20000,
         isActive: true,
       },
     ]);

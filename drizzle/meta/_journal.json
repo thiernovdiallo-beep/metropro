@@ -15,6 +15,20 @@
       "when": 1790728436518,
       "tag": "0001_regular_skrulls",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1790838296506,
+      "tag": "0002_yummy_khan",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1790839120931,
+      "tag": "0003_fancy_vampiro",
+      "breakpoints": true
     }
   ]
 }

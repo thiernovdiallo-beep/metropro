@@ -30,8 +30,8 @@ export function SiteHeader() {
   const [location] = useLocation();
   const isOps = location.startsWith("/admin") || location.startsWith("/driver");
   return (
-    <header className="sticky top-0 z-40 border-b border-border/80 bg-[#f6f1e8]/90 backdrop-blur">
-      <div className="container flex h-16 items-center justify-between">
+    <header className="sticky top-0 z-40 border-b border-border/75 bg-white/95 shadow-[0_2px_16px_-12px_rgba(17,70,85,0.35)] backdrop-blur">
+      <div className="container flex min-h-16 flex-wrap items-center justify-between gap-2 py-2">
         <Link href="/" className="no-underline">
           <Wordmark />
         </Link>
@@ -76,23 +76,23 @@ export function SiteHeader() {
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-border bg-primary text-primary-foreground">
-      <div className="container grid gap-6 py-10 md:grid-cols-3">
+    <footer className="border-t border-border bg-gradient-to-br from-white via-[#f2fbfc] to-[#e7f4f3] text-foreground">
+      <div className="container grid gap-7 py-12 md:grid-cols-3">
         <div>
           <Wordmark />
-          <p className="mt-3 max-w-xs text-sm text-primary-foreground/70">
+          <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted-foreground">
             Scheduled passenger-van service between New York City and Columbus. Reliable seats,
             clear prices, digital tickets.
           </p>
         </div>
-        <div className="text-sm text-primary-foreground/80">
+        <div className="text-sm leading-relaxed text-foreground/85">
           <div className="font-semibold">NYC ↔ Columbus</div>
-          <div className="mt-1">Standard $150 · Member $125</div>
+          <div className="mt-1">Regular $150 · Member's regular seat $100 · Front $200</div>
           <div className="mt-1">Pickup: Port Authority · Columbus Convention Center</div>
         </div>
-        <div className="text-sm text-primary-foreground/70">
-          Payments by Stripe. Never stored as card numbers. Metro Pro Member is $29.99/month and
-          is not unlimited travel.
+        <div className="text-sm leading-relaxed text-muted-foreground">
+          Payments by Stripe. Card numbers are never stored by Metro Pro. Membership is $25/month
+          and discounts only the member's own regular seat, not the front seat.
         </div>
       </div>
     </footer>

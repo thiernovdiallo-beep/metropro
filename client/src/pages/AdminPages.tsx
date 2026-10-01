@@ -40,9 +40,9 @@ export function AdminTrip() {
         <h2 className="mt-6 font-serif text-xl">Passenger manifest</h2>
         <div className="mt-3 grid gap-2">
           {(t?.manifest ?? []).map(p => (
-            <div key={p.id} className="ticket-card flex justify-between p-4 text-sm">
+            <div key={p.id} className="ticket-card flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
               <span>
-                {p.firstName} {p.lastName} · {p.status} · {p.bookingNumber}
+                {p.firstName} {p.lastName} · {p.seatType === "front" ? "Front seat" : "Regular seat"} · {p.status} · {p.bookingNumber}
               </span>
               <span>
                 {p.paymentStatus}
@@ -115,7 +115,7 @@ export function AdminFleet() {
         <div className="mt-4 grid gap-3">
           {(vans.data ?? []).map(v => (
             <Link key={v.id} href={`/admin/fleet/${v.id}`} className="ticket-card block p-4">
-              <div className="flex justify-between">
+              <div className="flex flex-wrap justify-between gap-2">
                 <span>
                   {v.code} · {v.year} {v.make} {v.model}
                 </span>
@@ -168,7 +168,7 @@ function InviteDriver({
   const [email, setEmail] = useState("");
   return (
     <form
-      className="mt-4 flex gap-2"
+      className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
       onSubmit={e => {
         e.preventDefault();
         onInvite({ fullName, email });
@@ -176,7 +176,7 @@ function InviteDriver({
     >
       <Input placeholder="Driver name" value={fullName} onChange={e => setName(e.target.value)} required />
       <Input placeholder="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-      <Button type="submit">Invite driver</Button>
+      <Button type="submit" className="min-h-10">Invite driver</Button>
     </form>
   );
 }
@@ -312,29 +312,35 @@ function RouteFareRow({
     estimatedMinutes: number;
     standardFareCents: number;
     memberFareCents: number;
+    frontFareCents: number;
     isActive: boolean;
   };
   onSave: (v: typeof route) => void;
 }) {
   const [standard, setStandard] = useState(route.standardFareCents);
   const [member, setMember] = useState(route.memberFareCents);
+  const [front, setFront] = useState(route.frontFareCents);
   return (
-    <div className="ticket-card mt-3 flex flex-wrap items-end gap-3 p-4 text-sm">
+    <div className="ticket-card mt-3 grid min-w-0 gap-3 p-4 text-sm sm:grid-cols-2 lg:grid-cols-[auto_repeat(3,minmax(0,1fr))_auto] lg:items-end">
       <div>
         Route #{route.id} · {route.estimatedMinutes} min
       </div>
-      <label>
+      <label className="form-field">
         Standard cents
         <Input type="number" value={standard} onChange={e => setStandard(Number(e.target.value))} />
       </label>
-      <label>
-        Member cents
+      <label className="form-field">
+        Member's regular seat cents
         <Input type="number" value={member} onChange={e => setMember(Number(e.target.value))} />
+      </label>
+      <label className="form-field">
+        Front seat cents (everyone)
+        <Input type="number" value={front} onChange={e => setFront(Number(e.target.value))} />
       </label>
       <Button
         size="sm"
         variant="outline"
-        onClick={() => onSave({ ...route, standardFareCents: standard, memberFareCents: member })}
+        onClick={() => onSave({ ...route, standardFareCents: standard, memberFareCents: member, frontFareCents: front })}
       >
         Save fares
       </Button>
@@ -380,7 +386,7 @@ function CityForm({ onSave }: { onSave: (v: { code: string; name: string; state:
   const [state, setState] = useState("");
   return (
     <form
-      className="mt-3 flex gap-2"
+      className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)_auto]"
       onSubmit={e => {
         e.preventDefault();
         onSave({ code, name, state });
@@ -389,7 +395,7 @@ function CityForm({ onSave }: { onSave: (v: { code: string; name: string; state:
       <Input placeholder="CLE" value={code} onChange={e => setCode(e.target.value)} />
       <Input placeholder="Cleveland" value={name} onChange={e => setName(e.target.value)} />
       <Input placeholder="OH" value={state} onChange={e => setState(e.target.value)} />
-      <Button type="submit">Add city</Button>
+      <Button type="submit" className="min-h-10">Add city</Button>
     </form>
   );
 }
@@ -522,6 +528,7 @@ export function AdminSettings() {
   const s = q.data;
   const [standard, setStandard] = useState<number | null>(null);
   const [member, setMember] = useState<number | null>(null);
+  const [front, setFront] = useState<number | null>(null);
   const [membership, setMembership] = useState<number | null>(null);
   return (
     <PageShell>
@@ -539,8 +546,12 @@ export function AdminSettings() {
               />
             </label>
             <label>
-              Member fare cents
+              Member's regular seat cents
               <Input type="number" value={member ?? s.memberFareCents} onChange={e => setMember(Number(e.target.value))} />
+            </label>
+            <label>
+              Front passenger seat cents (everyone)
+              <Input type="number" value={front ?? s.frontFareCents} onChange={e => setFront(Number(e.target.value))} />
             </label>
             <label>
               Membership cents / month
@@ -564,6 +575,7 @@ export function AdminSettings() {
                   ...s,
                   standardFareCents: standard ?? s.standardFareCents,
                   memberFareCents: member ?? s.memberFareCents,
+                  frontFareCents: front ?? s.frontFareCents,
                   membershipPriceCents: membership ?? s.membershipPriceCents,
                   membershipBenefits: (
                     (document.getElementById("membership-benefits") as HTMLTextAreaElement | null)?.value ??

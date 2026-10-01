@@ -122,6 +122,7 @@ export const routes = mysqlTable(
     estimatedMinutes: int("estimatedMinutes").notNull(),
     standardFareCents: int("standardFareCents").notNull(),
     memberFareCents: int("memberFareCents").notNull(),
+    frontFareCents: int("frontFareCents").notNull().default(20000),
     isActive: boolean("isActive").default(true).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -141,6 +142,8 @@ export const departures = mysqlTable(
     capacity: int("capacity").notNull().default(10),
     seatsSold: int("seatsSold").notNull().default(0),
     seatsHeld: int("seatsHeld").notNull().default(0),
+    frontSeatsSold: int("frontSeatsSold").notNull().default(0),
+    frontSeatsHeld: int("frontSeatsHeld").notNull().default(0),
     memberEarlyAccessAt: datetime("memberEarlyAccessAt", { mode: "date" }),
     status: mysqlEnum("status", [
       "scheduled",
@@ -178,7 +181,11 @@ export const bookings = mysqlTable(
     returnDepartureId: int("returnDepartureId"),
     tripType: mysqlEnum("tripType", ["one_way", "round_trip"]).notNull(),
     passengerCount: int("passengerCount").notNull(),
+    outboundFrontSeats: int("outboundFrontSeats").notNull().default(0),
+    returnFrontSeats: int("returnFrontSeats").notNull().default(0),
     fareType: mysqlEnum("fareType", ["standard", "member"]).notNull(),
+    outboundQuotedCents: int("outboundQuotedCents").notNull().default(0),
+    returnQuotedCents: int("returnQuotedCents").notNull().default(0),
     amountCents: int("amountCents").notNull(),
     status: mysqlEnum("status", [
       "pending_payment",
@@ -219,6 +226,10 @@ export const passengers = mysqlTable(
     bookingId: int("bookingId").notNull(),
     firstName: varchar("firstName", { length: 80 }).notNull(),
     lastName: varchar("lastName", { length: 80 }).notNull(),
+    outboundSeatType: mysqlEnum("outboundSeatType", ["standard", "front"])
+      .default("standard")
+      .notNull(),
+    returnSeatType: mysqlEnum("returnSeatType", ["standard", "front"]),
     status: mysqlEnum("status", ["booked", "checked_in", "boarded", "no_show"])
       .default("booked")
       .notNull(),
@@ -235,6 +246,7 @@ export const tickets = mysqlTable(
     bookingId: int("bookingId").notNull(),
     departureId: int("departureId").notNull(),
     qrToken: varchar("qrToken", { length: 48 }).notNull(),
+    seatType: mysqlEnum("seatType", ["standard", "front"]).default("standard").notNull(),
     status: mysqlEnum("status", ["booked", "checked_in", "boarded", "voided"])
       .default("booked")
       .notNull(),

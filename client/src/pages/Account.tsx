@@ -41,15 +41,15 @@ export default function Account() {
   }
   return (
     <PageShell>
-      <div className="container grid gap-8 py-10 lg:grid-cols-[220px_1fr]">
-        <aside className="flex gap-2 overflow-x-auto lg:flex-col">
+      <div className="container grid min-w-0 gap-8 py-10 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <aside className="flex min-w-0 gap-2 overflow-x-auto lg:flex-col">
           {NAV.map(([href, label]) => (
             <Link key={href} href={href} className="rounded-md px-3 py-2 text-sm hover:bg-secondary">
               {label}
             </Link>
           ))}
         </aside>
-        <section>
+        <section className="min-w-0">
           {section === "past" ? <Past /> : null}
           {section === "tickets" ? <Tickets /> : null}
           {section === "membership" ? <MembershipPanel /> : null}
@@ -158,18 +158,24 @@ function MembershipPanel() {
           <li key={b}>{b}</li>
         ))}
       </ul>
-      <Button
+      {overview.data?.membership?.status === "active" ? (
+        <Link href="/account/payments"><Button className="mt-6">Manage membership billing</Button></Link>
+      ) : <Button
         className="mt-6"
         onClick={async () => {
-          const r = await start.mutateAsync({ origin: window.location.origin });
-          if (r.checkoutUrl) {
-            toast.message("Opening Stripe Checkout in a new tab.");
-            window.open(r.checkoutUrl, "_blank");
+          try {
+            const r = await start.mutateAsync({ origin: window.location.origin });
+            if (r.checkoutUrl) {
+              toast.message("Opening Stripe Checkout in a new tab.");
+              window.open(r.checkoutUrl, "_blank");
+            }
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Could not start membership checkout");
           }
         }}
       >
-        Become a Member · {moneyExact(settings.data?.membershipPriceCents ?? 2999)}/mo
-      </Button>
+        Become a Member · {moneyExact(settings.data?.membershipPriceCents ?? 2500)}/mo
+      </Button>}
     </div>
   );
 }
@@ -184,7 +190,7 @@ function Passengers() {
     <div>
       <h1 className="font-serif text-3xl">Saved passengers</h1>
       <form
-        className="mt-4 flex gap-2"
+        className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
         onSubmit={e => {
           e.preventDefault();
           add.mutate({ firstName, lastName });
@@ -194,11 +200,11 @@ function Passengers() {
       >
         <Input placeholder="First" value={firstName} onChange={e => setFirst(e.target.value)} required />
         <Input placeholder="Last" value={lastName} onChange={e => setLast(e.target.value)} required />
-        <Button type="submit">Save</Button>
+        <Button type="submit" className="min-h-10">Save</Button>
       </form>
       <div className="mt-4 grid gap-2">
         {(q.data ?? []).map(p => (
-          <div key={p.id} className="flex items-center justify-between ticket-card px-4 py-3">
+          <div key={p.id} className="ticket-card flex min-w-0 flex-wrap items-center justify-between gap-2 px-4 py-3">
             <span>
               {p.firstName} {p.lastName}
             </span>
@@ -244,7 +250,7 @@ function Receipts() {
       <h1 className="font-serif text-3xl">Receipts</h1>
       <div className="mt-4 grid gap-2">
         {(q.data ?? []).map(p => (
-          <div key={p.id} className="ticket-card flex justify-between p-4 text-sm">
+          <div key={p.id} className="ticket-card flex flex-wrap items-center justify-between gap-2 p-4 text-sm">
             <span className="capitalize">
               {p.kind} · {p.status}
             </span>

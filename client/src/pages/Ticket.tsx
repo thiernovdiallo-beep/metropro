@@ -21,7 +21,7 @@ export default function Ticket() {
     <PageShell>
       <div className="container max-w-md py-10">
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
-          <div className="bg-primary px-5 py-4 text-primary-foreground">
+          <div className="border-b border-border bg-gradient-to-r from-[#e6f6f9] to-white px-5 py-4 text-foreground">
             <Wordmark />
           </div>
           <div className="space-y-3 p-5">
@@ -42,6 +42,7 @@ export default function Ticket() {
               Drop-off {trip.dropoff?.label}
             </div>
             <div className="text-sm">Passengers on booking: {booking.passengerCount}</div>
+            <div className="text-sm font-semibold text-primary">Seat: {ticket.seatType === "front" ? "Front passenger seat" : "Regular passenger seat"}</div>
             <div className="inline-flex rounded-full bg-secondary px-3 py-1 text-xs font-semibold uppercase tracking-wider">
               {ticket.status.replace("_", " ")}
             </div>

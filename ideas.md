@@ -25,29 +25,29 @@ Quiet transportation modernism: timetable clarity, civic wayfinding, and a restr
 
 ## Color philosophy
 
-Deep navy is the authority color — uniforms, night highways, reliability. Warm paper white keeps the product human. A single copper/amber accent is reserved for prices, remaining seats, and primary CTAs. Status uses semantic greens/reds sparingly.
+**Daylight Northline refresh (October 2026):** preserve the navy route-chevron logo and transport typography, but replace the dark full-bleed hero and paper-brown surroundings with white cards, an airy ice-blue background, sea-glass teal CTAs and subtle sky/mint washes. Dark ink remains for readable copy; pricing uses a high-contrast teal accent.
 
-- Navy `#0B1F3A`
-- Ink `#10243F`
-- Paper `#F6F1E8`
-- Copper `#C47A3A`
-- Copper hover `#A8642C`
-- Line `#D9D1C4`
-- Seat green `#2F6F4E`
-- Alert `#9B2C2C`
+- Ink `#17384A`
+- Primary teal `#137A86`
+- Ice blue `#F3FAFD`
+- Card white `#FFFFFF`
+- Sea-glass `#E7F4F3`
+- Warm highlight `#FFF3E5`
+- Line `#CFE1E8`
+- Alert `#A33E43`
 
 Light theme only. No dark-mode toggle for MVP.
 
 ## Layout paradigm
 
-Mobile-first stacked booking card on a full-bleed hero. Desktop: centered 720px booking column over a wide editorial hero, then a 12-column operations grid for admin. Large tap targets (min 48px). Bottom-nav for signed-in customers; side rail for admin on desktop, stacked sections on mobile.
+Mobile-first stacked booking card on a light editorial hero. Booking fields use the full width on narrow screens; two-column date and passenger controls appear only when each has room. Desktop uses a clear booking card and responsive operations grids. Labels remain above fields with comfortable spacing and at least 48px touch targets for booking.
 
 ## Signature elements
 
 - Square navy mark with a simplified dual-lane / northbound route chevron
-- Departure cards that look like punched tickets: time left, route right, fare in copper
+- Departure cards that look like punched tickets: time left, route right, fare in teal
 - **SOLD OUT** as a stamped overlay, not a disabled ghost button
-- QR tickets on warm paper with navy header bar
+- QR tickets on white with a navy header bar
 - Dispatch board as a four-van status strip, each van a card with a color status rail
 
 ## Interaction philosophy
@@ -71,7 +71,7 @@ Reliable north–south service. You know where you stand: seat, time, price.
 
 ## Brand voice
 
-Calm, specific, adult. “8:00 AM · 2 seats left · Member $125.” Not “Your adventure awaits.”
+Calm, specific, adult. “8:00 AM · 2 seats left · Member $100.” Not “Your adventure awaits.”
 
 ## Wordmark / logo
 
@@ -79,4 +79,4 @@ Calm, specific, adult. “8:00 AM · 2 seats left · Member $125.” Not “Your
 
 ## Signature brand color
 
-Navy `#0B1F3A` with copper `#C47A3A` as the only promotional accent.
+Sea-glass teal `#137A86` over bright ice blue, with the original navy mark retained.

@@ -47,7 +47,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 
   if (user.name !== undefined) {
     values.name = user.name ?? null;
-    updateSet.name = user.name ?? null;
+    if (!existing?.name) updateSet.name = user.name ?? null;
   }
   if (user.email !== undefined) {
     values.email = user.email ?? null;
@@ -125,7 +125,7 @@ export async function getActiveMembership(userId: number) {
     .from(memberships)
     .where(and(eq(memberships.userId, userId), eq(memberships.status, "active")))
     .limit(1);
-  return row;
+  return row && (!row.currentPeriodEnd || row.currentPeriodEnd > new Date()) ? row : undefined;
 }
 
 export async function writeAudit(

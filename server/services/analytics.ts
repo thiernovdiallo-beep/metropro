@@ -145,30 +145,32 @@ export async function getAnalytics() {
     if (!p.bookingId) continue;
     paidByBooking.set(p.bookingId, (paidByBooking.get(p.bookingId) ?? 0) + p.amountCents);
   }
-  const alloc = (bookingId: number, legs: number) =>
-    Math.round((paidByBooking.get(bookingId) ?? 0) / Math.max(1, legs));
+  const { allocatePaidAcrossLegs } = await import("./pricing");
 
   const revenueByRouteMap = new Map<number, number>();
   const revenueByVehicleMap = new Map<number, number>();
   const revenuePerTripMap = new Map<number, number>();
   for (const b of confirmed) {
-    const legs = b.returnDepartureId ? 2 : 1;
-    const share = alloc(b.id, legs);
+    const split = allocatePaidAcrossLegs(
+      paidByBooking.get(b.id) ?? 0,
+      b.outboundQuotedCents,
+      b.returnQuotedCents
+    );
     const out = allDeps.find(d => d.id === b.outboundDepartureId);
     const ret = b.returnDepartureId ? allDeps.find(d => d.id === b.returnDepartureId) : null;
     if (out) {
-      revenueByRouteMap.set(out.routeId, (revenueByRouteMap.get(out.routeId) ?? 0) + share);
+      revenueByRouteMap.set(out.routeId, (revenueByRouteMap.get(out.routeId) ?? 0) + split.outboundCents);
       if (out.vehicleId) {
-        revenueByVehicleMap.set(out.vehicleId, (revenueByVehicleMap.get(out.vehicleId) ?? 0) + share);
+        revenueByVehicleMap.set(out.vehicleId, (revenueByVehicleMap.get(out.vehicleId) ?? 0) + split.outboundCents);
       }
-      revenuePerTripMap.set(out.id, (revenuePerTripMap.get(out.id) ?? 0) + share);
+      revenuePerTripMap.set(out.id, (revenuePerTripMap.get(out.id) ?? 0) + split.outboundCents);
     }
     if (ret) {
-      revenueByRouteMap.set(ret.routeId, (revenueByRouteMap.get(ret.routeId) ?? 0) + share);
+      revenueByRouteMap.set(ret.routeId, (revenueByRouteMap.get(ret.routeId) ?? 0) + split.returnCents);
       if (ret.vehicleId) {
-        revenueByVehicleMap.set(ret.vehicleId, (revenueByVehicleMap.get(ret.vehicleId) ?? 0) + share);
+        revenueByVehicleMap.set(ret.vehicleId, (revenueByVehicleMap.get(ret.vehicleId) ?? 0) + split.returnCents);
       }
-      revenuePerTripMap.set(ret.id, (revenuePerTripMap.get(ret.id) ?? 0) + share);
+      revenuePerTripMap.set(ret.id, (revenuePerTripMap.get(ret.id) ?? 0) + split.returnCents);
     }
   }
 

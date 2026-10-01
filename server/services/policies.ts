@@ -1,10 +1,11 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "../db";
-import { settings } from "../../drizzle/schema";
+import { routes, settings } from "../../drizzle/schema";
 
 export type AppSettings = {
   standardFareCents: number;
   memberFareCents: number;
+  frontFareCents: number;
   membershipPriceCents: number;
   membershipBenefits: string[];
   cancelCutoffHours: number;
@@ -16,10 +17,11 @@ export type AppSettings = {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   standardFareCents: 15000,
-  memberFareCents: 12500,
-  membershipPriceCents: 2999,
+  memberFareCents: 10000,
+  frontFareCents: 20000,
+  membershipPriceCents: 2500,
   membershipBenefits: [
-    "$125 member fare instead of $150",
+    "$100 for the member's own regular seat instead of $150 (front seat remains $200)",
     "Priority booking",
     "Member-only promotions",
     "One free eligible trip reschedule",
@@ -52,6 +54,11 @@ export async function saveSettings(next: AppSettings): Promise<void> {
     .insert(settings)
     .values({ settingKey: "app", valueJson: next })
     .onDuplicateKeyUpdate({ set: { valueJson: next } });
+  await db.update(routes).set({
+    standardFareCents: next.standardFareCents,
+    memberFareCents: next.memberFareCents,
+    frontFareCents: next.frontFareCents,
+  });
 }
 
 export function canSelfServeChange(departAt: Date, cutoffHours: number, now = new Date()) {
