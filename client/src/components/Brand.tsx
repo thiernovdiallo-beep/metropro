@@ -27,8 +27,16 @@ export function Wordmark() {
 
 export function SiteHeader() {
   const { user, isAuthenticated, logout } = useAuth();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const isOps = location.startsWith("/admin") || location.startsWith("/driver");
+  const memberEntry = () => {
+    if (isAuthenticated) {
+      setLocation("/account/settings");
+      return;
+    }
+    sessionStorage.setItem("metropro-member-onboarding", "1");
+    startLogin();
+  };
   return (
     <header className="sticky top-0 z-40 border-b border-border/75 bg-white/95 shadow-[0_2px_16px_-12px_rgba(17,70,85,0.35)] backdrop-blur">
       <div className="container flex min-h-16 flex-wrap items-center justify-between gap-2 py-2">
@@ -54,7 +62,9 @@ export function SiteHeader() {
           ) : null}
         </nav>
         <div className="flex items-center gap-2">
-          {isAuthenticated ? (
+          {location === "/" ? (
+            <Button onClick={memberEntry}>Member sign in</Button>
+          ) : isAuthenticated ? (
             <>
               {!isOps ? (
                 <Link href="/account">
@@ -66,7 +76,7 @@ export function SiteHeader() {
               </Button>
             </>
           ) : (
-            <Button onClick={() => { sessionStorage.setItem("metropro-member-onboarding", "1"); startLogin(); }}>Member login</Button>
+            <Button onClick={memberEntry}>Member sign in</Button>
           )}
         </div>
       </div>
