@@ -2,26 +2,12 @@ import { PageShell } from "@/components/Brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { prepareIdPhoto } from "@/lib/id-photo";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
-
-const MAX_ID_PHOTO_BYTES = 2 * 1024 * 1024;
-
-async function encodeIdPhoto(file: File) {
-  if (file.size > MAX_ID_PHOTO_BYTES) throw new Error("Choose an ID photo smaller than 2 MB.");
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Could not read the ID photo"));
-    reader.onload = () => {
-      const result = String(reader.result ?? "");
-      resolve(result.slice(result.indexOf(",") + 1));
-    };
-    reader.readAsDataURL(file);
-  });
-}
 
 export default function CreateAccount() {
   const [, setLocation] = useLocation();
@@ -44,7 +30,7 @@ export default function CreateAccount() {
     if (password !== confirmPassword) { setError("Passwords do not match."); return; }
     setBusy(true);
     try {
-      const idPhotoBase64 = await encodeIdPhoto(photo);
+      const { base64: idPhotoBase64 } = await prepareIdPhoto(photo);
       const result = await register.mutateAsync({ name, email, phone, password, confirmPassword, idPhotoBase64 });
       sessionStorage.setItem("metropro-member-session", result.sessionToken);
       sessionStorage.removeItem("manus-cookie");
@@ -111,11 +97,12 @@ export default function CreateAccount() {
             </div>
             <div className="form-field min-w-0 rounded-xl border border-dashed border-primary/35 bg-[#f4fbfd] p-4">
               <Label htmlFor="signup-id">Picture of your ID *</Label>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">JPEG, PNG or WebP · 2 MB maximum. Encrypted and never displayed publicly.</p>
-              <Input id="signup-id" type="file" accept="image/jpeg,image/png,image/webp" className="mt-3 h-auto min-h-12 min-w-0 bg-white py-2" required onChange={e => setPhoto(e.target.files?.[0] ?? null)} />
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Choose a JPEG, PNG or WebP photo up to 25 MB (HEIC if your browser supports it). We resize and compress it on your device before securely uploading an image under 2 MB. Make sure the ID text is clear.</p>
+              <Input id="signup-id" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" className="mt-3 h-auto min-h-12 min-w-0 bg-white py-2" required onChange={e => setPhoto(e.target.files?.[0] ?? null)} />
+              {photo ? <p className="text-xs text-muted-foreground">Selected: {photo.name} ({(photo.size / 1024 / 1024).toFixed(1)} MB)</p> : null}
             </div>
             {error ? <p className="text-sm font-medium text-destructive" role="alert">{error}</p> : null}
-            <Button type="submit" className="h-12 w-full text-base" disabled={busy}>{busy ? "Creating account…" : "Create member account"}</Button>
+            <Button type="submit" className="h-12 w-full text-base" disabled={busy}>{busy ? "Preparing photo and creating account…" : "Create member account"}</Button>
             <p className="text-xs leading-relaxed text-muted-foreground">No payment or recurring subscription starts with this button. Membership enrollment is a separate, optional checkout.</p>
           </form>
         </div>

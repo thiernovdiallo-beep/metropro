@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { COOKIE_NAME } from "@/const";
 import { formatDate, formatTime, moneyExact } from "@/lib/format";
+import { prepareIdPhoto } from "@/lib/id-photo";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Link, useRoute } from "wouter";
@@ -406,24 +407,13 @@ function Settings({
       toast.error("Select a picture of your ID to complete your member profile.");
       return;
     }
-    if (photo && photo.size > 2 * 1024 * 1024) {
-      toast.error("Your ID photo must be under 2 MB.");
-      return;
-    }
     setSaving(true);
     try {
+      // Do local image work before changing any saved profile fields.
+      const preparedPhoto = photo ? await prepareIdPhoto(photo) : null;
       await save.mutateAsync({ name, email: mail, phone: tel });
-      if (photo) {
-        const encoded = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onerror = () => reject(new Error("Could not read this ID image"));
-          reader.onload = () => {
-            const result = String(reader.result ?? "");
-            resolve(result.slice(result.indexOf(",") + 1));
-          };
-          reader.readAsDataURL(photo);
-        });
-        await upload.mutateAsync({ base64: encoded });
+      if (preparedPhoto) {
+        await upload.mutateAsync({ base64: preparedPhoto.base64 });
         setPhoto(null);
       }
       await Promise.all([profile.refetch(), utils.auth.me.invalidate(), utils.account.overview.invalidate()]);
@@ -462,8 +452,8 @@ function Settings({
         </div>
         <div className="min-w-0 rounded-xl border border-dashed border-primary/35 bg-[#f4fbfd] p-4">
           <Label htmlFor="member-id">Picture of your ID *</Label>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">JPEG, PNG or WebP · 2 MB maximum. Stored encrypted and never shown in public search or on tickets.</p>
-          <Input id="member-id" type="file" accept="image/jpeg,image/png,image/webp" className="mt-3 h-auto min-h-12 min-w-0 bg-white py-2" required={!profile.data?.idPhotoUploadedAt}
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Choose a JPEG, PNG or WebP photo up to 25 MB (HEIC if supported). It is resized and compressed on your device before an under-2-MB encrypted upload. Make sure the ID text is clear.</p>
+          <Input id="member-id" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" className="mt-3 h-auto min-h-12 min-w-0 bg-white py-2" required={!profile.data?.idPhotoUploadedAt}
             onChange={e => setPhoto(e.target.files?.[0] ?? null)} />
           {profile.data?.idPhotoUploadedAt ? <p className="mt-2 text-xs font-semibold text-primary">ID photo on file · {new Date(profile.data.idPhotoUploadedAt).toLocaleDateString()} · choose a new image to replace it</p> : null}
           {photo ? <p className="mt-2 text-xs">Selected: {photo.name}</p> : null}
