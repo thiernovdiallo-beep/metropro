@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { memberCredentials, memberIdPhotos, users } from "../../drizzle/schema";
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, FIRST_PARTY_HEADER } from "@shared/const";
 import { getDb } from "../db";
 import { insertId } from "../lib/mysql";
 import { assertMemberAuthOrigin } from "../services/checkout-origin";
@@ -47,7 +47,7 @@ export const memberAuthRouter = router({
       idPhotoBase64: z.string().min(1).max(2_800_000),
     }).refine(input => input.password === input.confirmPassword, { path: ["confirmPassword"], message: "Passwords do not match" }))
     .mutation(async ({ ctx, input }) => {
-      assertMemberAuthOrigin(ctx.req.headers.origin);
+      assertMemberAuthOrigin(ctx.req.headers.origin, ctx.req.headers["sec-fetch-site"], ctx.req.get(FIRST_PARTY_HEADER));
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Account setup is unavailable" });
       const email = normalizeMemberEmail(input.email);
@@ -97,7 +97,7 @@ export const memberAuthRouter = router({
   signIn: publicProcedure
     .input(z.object({ email: emailSchema, password: z.string().min(1).max(256) }))
     .mutation(async ({ ctx, input }) => {
-      assertMemberAuthOrigin(ctx.req.headers.origin);
+      assertMemberAuthOrigin(ctx.req.headers.origin, ctx.req.headers["sec-fetch-site"], ctx.req.get(FIRST_PARTY_HEADER));
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Sign-in is unavailable" });
       const email = normalizeMemberEmail(input.email);

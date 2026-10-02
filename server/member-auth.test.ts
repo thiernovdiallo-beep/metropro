@@ -26,7 +26,15 @@ describe("local member credentials", () => {
 
   it("accepts only this project's trusted app origin for browser credential mutations", () => {
     const preview = "https://8328-ip1nxp76g4ol7r5z117o1-dd2b4445.us1.manus.computer";
+    const internal = `http://127.0.0.1:${process.env.PORT || "3000"}`;
     expect(assertMemberAuthOrigin(preview)).toBe(preview);
+    expect(assertMemberAuthOrigin(internal, "same-origin", "1")).toBe(preview);
+    expect(assertMemberAuthOrigin(internal, undefined, "1")).toBe(preview);
+    expect(() => assertMemberAuthOrigin(internal, "same-origin")).toThrow("Open Metro Pro");
+    expect(() => assertMemberAuthOrigin(internal, "cross-site", "1")).toThrow("Open Metro Pro");
+    expect(() => assertMemberAuthOrigin(internal)).toThrow("Open Metro Pro");
+    expect(() => assertMemberAuthOrigin(preview, "cross-site")).toThrow("Open Metro Pro");
+    expect(() => assertMemberAuthOrigin("https://not-metro.example", "same-origin")).toThrow();
     expect(() => assertMemberAuthOrigin("https://not-metro.example")).toThrow();
     expect(() => assertMemberAuthOrigin(undefined)).toThrow();
   });

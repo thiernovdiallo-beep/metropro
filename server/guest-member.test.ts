@@ -23,7 +23,14 @@ describe("Stripe return origin", () => {
   const preview = "https://8328-ip1nxp76g4ol7r5z117o1-dd2b4445.us1.manus.computer";
 
   it("accepts the exact project Preview and rejects client-selected or cross-origin redirects", () => {
+    const internal = `http://127.0.0.1:${process.env.PORT || "3000"}`;
     expect(approvedCheckoutOrigin(preview, preview)).toBe(preview);
+    expect(approvedCheckoutOrigin(preview, internal, "same-origin", "1")).toBe(preview);
+    expect(approvedCheckoutOrigin(preview, internal, undefined, "1")).toBe(preview);
+    expect(() => approvedCheckoutOrigin(preview, internal, "same-origin")).toThrow();
+    expect(() => approvedCheckoutOrigin(preview, internal, "cross-site", "1")).toThrow();
+    expect(() => approvedCheckoutOrigin(preview, internal)).toThrow();
+    expect(() => approvedCheckoutOrigin("https://example.com", internal, "same-origin", "1")).toThrow();
     expect(() => approvedCheckoutOrigin("https://example.com", "https://example.com")).toThrow();
     expect(() => approvedCheckoutOrigin(preview, "https://example.com")).toThrow();
     expect(() => approvedCheckoutOrigin(`${preview}/stolen-path`, preview)).toThrow();

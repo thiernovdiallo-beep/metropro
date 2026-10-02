@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import { FIRST_PARTY_HEADER } from "@shared/const";
 import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -464,7 +465,8 @@ export const accountRouter = router({
   startMembershipCheckout: protectedProcedure
     .input(z.object({ origin: z.string().url() }))
     .mutation(async ({ ctx, input }) => {
-      const origin = approvedCheckoutOrigin(input.origin, ctx.req.headers.origin);
+      const origin = approvedCheckoutOrigin(input.origin, ctx.req.headers.origin,
+        ctx.req.headers["sec-fetch-site"], ctx.req.get(FIRST_PARTY_HEADER));
       const profile = await getMemberProfileStatus(ctx.user.id);
       if (!profile.complete) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Complete your name, email, phone and ID photo before joining." });
@@ -508,7 +510,8 @@ export const accountRouter = router({
   billingPortal: protectedProcedure
     .input(z.object({ origin: z.string().url() }))
     .mutation(async ({ ctx, input }) => {
-      const origin = approvedCheckoutOrigin(input.origin, ctx.req.headers.origin);
+      const origin = approvedCheckoutOrigin(input.origin, ctx.req.headers.origin,
+        ctx.req.headers["sec-fetch-site"], ctx.req.get(FIRST_PARTY_HEADER));
       if (!ctx.user.stripeCustomerId || !stripeEnabled()) {
         throw new TRPCError({
           code: "BAD_REQUEST",

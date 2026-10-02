@@ -1,5 +1,5 @@
 import { trpc } from "@/lib/trpc";
-import { COOKIE_NAME, UNAUTHED_ERR_MSG } from '@shared/const';
+import { COOKIE_NAME, FIRST_PARTY_HEADER, FIRST_PARTY_VALUE, UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
@@ -43,9 +43,10 @@ const trpcClient = trpc.createClient({
       url: "/api/trpc",
       transformer: superjson,
       headers() {
+        const firstPartyHeaders = { [FIRST_PARTY_HEADER]: FIRST_PARTY_VALUE };
         try {
           const memberToken = sessionStorage.getItem("metropro-member-session");
-          if (memberToken) return { Authorization: `Bearer ${memberToken}` };
+          if (memberToken) return { ...firstPartyHeaders, Authorization: `Bearer ${memberToken}` };
         } catch {
           // Fall back to the existing OAuth session or a secure cookie.
         }
@@ -60,13 +61,13 @@ const trpcClient = trpc.createClient({
             const pair = raw.split(";").find(s => s.trim().startsWith(prefix));
             const token = pair?.trim().slice(prefix.length);
             if (token) {
-              return { Authorization: `Bearer ${token}` };
+              return { ...firstPartyHeaders, Authorization: `Bearer ${token}` };
             }
           }
         } catch {
           // sessionStorage unavailable
         }
-        return {};
+        return firstPartyHeaders;
       },
       fetch(input, init) {
         return globalThis.fetch(input, {

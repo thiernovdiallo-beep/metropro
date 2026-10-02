@@ -4,6 +4,11 @@ export const AXIOS_TIMEOUT_MS = 30_000;
 export const UNAUTHED_ERR_MSG = 'Please login (10001)';
 export const NOT_ADMIN_ERR_MSG = 'You do not have required permission (10002)';
 
+// A custom browser API header is a CSRF signal, not a credential: another
+// website cannot send it without a successful CORS preflight (which we deny).
+export const FIRST_PARTY_HEADER = "x-metropro-first-party";
+export const FIRST_PARTY_VALUE = "1";
+
 // One-time nonce cookie that binds an OAuth login to the browser that started
 // it. The `__Host-` prefix forces the cookie host-only (Secure, Path=/, no
 // Domain), so a sibling *.manus.space site cannot plant a matching value in a

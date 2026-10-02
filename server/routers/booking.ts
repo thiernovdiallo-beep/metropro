@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import { FIRST_PARTY_HEADER } from "@shared/const";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { bookings, cities, departures, locations, passengers, routes, tickets } from "../../drizzle/schema";
@@ -121,7 +122,8 @@ export const bookingRouter = router({
       emergencyPhone: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const origin = approvedCheckoutOrigin(input.origin, ctx.req.headers.origin);
+      const origin = approvedCheckoutOrigin(input.origin, ctx.req.headers.origin,
+        ctx.req.headers["sec-fetch-site"], ctx.req.get(FIRST_PARTY_HEADER));
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       const settings = await getSettings();
