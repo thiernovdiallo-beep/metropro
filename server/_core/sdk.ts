@@ -263,17 +263,16 @@ class SDKServer {
   }
 
   async authenticateRequest(req: Request): Promise<AuthenticatedUser> {
-    // A member who explicitly signs in with a password can have a local bearer
-    // fallback while Preview still forwards an older Manus auto-login cookie.
-    // Prefer only a verified local-account token; ordinary OAuth still uses the
-    // established cookie-first flow.
+    // An explicit password sign-in (member or admin) takes precedence over a
+    // stale OAuth/Preview cookie. Only our versioned, signed password tokens
+    // qualify; ordinary OAuth keeps the established cookie-first behavior.
     const cookies = this.parseCookies(req.headers.cookie);
     const authHeader = req.headers.authorization;
     const bearerToken = typeof authHeader === "string" && authHeader.startsWith("Bearer ")
       ? authHeader.slice(7) : undefined;
-    const localBearerSession = bearerToken ? await this.verifySession(bearerToken) : null;
-    const explicitLocalSession = Boolean(localBearerSession?.openId.startsWith("local_"));
-    let sessionToken = explicitLocalSession ? bearerToken : cookies.get(COOKIE_NAME);
+    const passwordBearerSession = bearerToken ? await this.verifySession(bearerToken) : null;
+    const explicitPasswordSession = passwordBearerSession?.memberSessionVersion !== undefined;
+    let sessionToken = explicitPasswordSession ? bearerToken : cookies.get(COOKIE_NAME);
     if (!sessionToken && req.path.startsWith("/api/scheduled/")) {
       const ticket = cookies.get("app_session_id");
       const identity = await this.verifySession(ticket);
@@ -285,7 +284,7 @@ class SDKServer {
     //    Safari ITP, private browsing, or iOS/Android WebView.
     if (!sessionToken) sessionToken = bearerToken;
 
-    const session = explicitLocalSession ? localBearerSession : await this.verifySession(sessionToken);
+    const session = explicitPasswordSession ? passwordBearerSession : await this.verifySession(sessionToken);
 
     if (!session) {
       throw ForbiddenError("Invalid session cookie");
@@ -326,13 +325,13 @@ class SDKServer {
       throw ForbiddenError("User not found");
     }
 
-    if (session.openId.startsWith("local_")) {
+    if (session.openId.startsWith("local_") || session.memberSessionVersion !== undefined) {
       const database = await db.getDb();
-      if (!database) throw ForbiddenError("Member session unavailable");
+      if (!database) throw ForbiddenError("Password session unavailable");
       const [credential] = await database.select({ version: memberCredentials.sessionVersion })
         .from(memberCredentials).where(eq(memberCredentials.userId, user.id)).limit(1);
       if (!credential || session.memberSessionVersion !== credential.version) {
-        throw ForbiddenError("Member session has ended");
+        throw ForbiddenError("Password session has ended");
       }
     }
 

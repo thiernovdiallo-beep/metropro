@@ -17,7 +17,8 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
 
   if (!isUnauthorized) return;
-  if (/^\/(admin|driver)(\/|$)/.test(window.location.pathname)) startLogin();
+  if (/^\/admin(\/|$)/.test(window.location.pathname)) window.location.href = "/admin/login";
+  else if (/^\/driver(\/|$)/.test(window.location.pathname)) startLogin();
   else window.location.href = "/#member-sign-in";
 };
 
@@ -45,6 +46,8 @@ const trpcClient = trpc.createClient({
       headers() {
         const firstPartyHeaders = { [FIRST_PARTY_HEADER]: FIRST_PARTY_VALUE };
         try {
+          const adminToken = sessionStorage.getItem("metropro-admin-session");
+          if (adminToken) return { ...firstPartyHeaders, Authorization: `Bearer ${adminToken}` };
           const memberToken = sessionStorage.getItem("metropro-member-session");
           if (memberToken) return { ...firstPartyHeaders, Authorization: `Bearer ${memberToken}` };
         } catch {

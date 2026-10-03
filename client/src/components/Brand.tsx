@@ -65,7 +65,7 @@ export function SiteHeader() {
           ) : null}
         </nav>
         <div className="flex items-center gap-2">
-          {location === "/admin/login" ? null : location === "/" ? (
+          {location === "/admin/login" || location === "/admin/setup" ? null : location === "/" ? (
             <Button onClick={memberEntry}>Member sign in</Button>
           ) : isAuthenticated ? (
             <>

@@ -1,0 +1,1 @@
+CREATE INDEX `adminLoginThrottle_expiry_idx` ON `adminLoginThrottle` (`windowEndsAt`);

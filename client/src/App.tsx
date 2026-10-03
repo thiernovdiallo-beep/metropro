@@ -17,6 +17,7 @@ import Membership from "./pages/Membership";
 import DriverHome from "./pages/DriverHome";
 import DriverTrip from "./pages/DriverTrip";
 import AdminLogin from "./pages/AdminLogin";
+import AdminSetup from "./pages/AdminSetup";
 import AdminHome from "./pages/AdminHome";
 import {
   AdminAnalytics,
@@ -43,6 +44,7 @@ function Router() {
       <Route path="/driver" component={DriverHome} />
       <Route path="/driver/trip/:id" component={DriverTrip} />
       <Route path="/admin/login" component={AdminLogin} />
+      <Route path="/admin/setup" component={AdminSetup} />
       <Route path="/admin"><AdminGuard><AdminHome /></AdminGuard></Route>
       <Route path="/admin/trips/:id"><AdminGuard><AdminTrip /></AdminGuard></Route>
       <Route path="/admin/dispatch"><AdminGuard><AdminDispatch /></AdminGuard></Route>

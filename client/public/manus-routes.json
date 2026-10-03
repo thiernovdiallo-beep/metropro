@@ -21,6 +21,7 @@
     { "path": "/driver", "title": "Driver home" },
     { "path": "/driver/trip/:id", "title": "Trip manifest" },
     { "path": "/admin/login", "title": "Admin sign in" },
+    { "path": "/admin/setup", "title": "Admin password setup" },
     { "path": "/admin", "title": "Operations" },
     { "path": "/admin/trips/:id", "title": "Trip detail" },
     { "path": "/admin/dispatch", "title": "Dispatch board" },

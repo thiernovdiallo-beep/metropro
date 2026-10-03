@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
-import { COOKIE_NAME } from "../shared/const";
+import { COOKIE_NAME, FIRST_PARTY_HEADER } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
 
 type CookieCall = {
@@ -8,28 +8,17 @@ type CookieCall = {
   options: Record<string, unknown>;
 };
 
-type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
-
 function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] } {
   const clearedCookies: CookieCall[] = [];
 
-  const user: AuthenticatedUser = {
-    id: 1,
-    openId: "sample-user",
-    email: "sample@example.com",
-    name: "Sample User",
-    loginMethod: "manus",
-    role: "user",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    lastSignedIn: new Date(),
-  };
-
   const ctx: TrpcContext = {
-    user,
+    // Clearing the cookie while logged out should never alter a real user's
+    // password-session version in the shared managed database.
+    user: null,
     req: {
       protocol: "https",
-      headers: {},
+      headers: { origin: "https://8328-ip1nxp76g4ol7r5z117o1-dd2b4445.us1.manus.computer" },
+      get: (name: string) => name === FIRST_PARTY_HEADER ? "1" : undefined,
     } as TrpcContext["req"],
     res: {
       clearCookie: (name: string, options: Record<string, unknown>) => {
@@ -58,5 +47,12 @@ describe("auth.logout", () => {
       httpOnly: true,
       path: "/",
     });
+  });
+
+  it("rejects a cross-site logout attempt before clearing the cookie", async () => {
+    const { ctx, clearedCookies } = createAuthContext();
+    ctx.req.headers.origin = "https://unrelated.example";
+    await expect(appRouter.createCaller(ctx).auth.logout()).rejects.toThrow("Open Metro Pro");
+    expect(clearedCookies).toHaveLength(0);
   });
 });

@@ -51,6 +51,32 @@ export const memberCredentials = mysqlTable(
   ]
 );
 
+// Issued only through the project-owner notification workflow; raw tokens are
+// never stored. A token can set a password on an existing admin just once.
+export const adminSetupInvites = mysqlTable(
+  "adminSetupInvites",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+    expiresAt: datetime("expiresAt", { mode: "date" }).notNull(),
+    consumedAt: datetime("consumedAt", { mode: "date" }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("adminSetupInvites_tokenHash_unique").on(table.tokenHash),
+    index("adminSetupInvites_userId_idx").on(table.userId),
+  ]
+);
+
+// Short fixed windows bound admin password-check load across application
+// instances, including requests for email addresses that do not exist.
+export const adminLoginThrottle = mysqlTable("adminLoginThrottle", {
+  rateKey: varchar("rateKey", { length: 64 }).primaryKey(),
+  attempts: int("attempts").default(0).notNull(),
+  windowEndsAt: datetime("windowEndsAt", { mode: "date" }).notNull(),
+}, table => [index("adminLoginThrottle_expiry_idx").on(table.windowEndsAt)]);
+
 // ID image ciphertext is never served through the public storage namespace.
 export const memberIdPhotos = mysqlTable("memberIdPhotos", {
   userId: int("userId").primaryKey(),
