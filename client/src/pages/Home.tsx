@@ -1,5 +1,4 @@
 import { PageShell } from "@/components/Brand";
-import { startLogin } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -73,11 +72,6 @@ export default function Home() {
     }
   }, []);
 
-  function existingManusEntry() {
-    sessionStorage.setItem("metropro-member-onboarding", "1");
-    startLogin();
-  }
-
   async function submitMemberSignIn(event: React.FormEvent) {
     event.preventDefault();
     setMemberError("");
@@ -141,7 +135,6 @@ export default function Home() {
                 <Link href="/create-account" className="font-semibold text-primary underline">Create a member account</Link>
                 <span className="text-muted-foreground">· Account creation is free.</span>
               </div>
-              <button type="button" onClick={existingManusEntry} className="w-fit text-left text-xs font-medium text-muted-foreground underline hover:text-primary">Already used Manus sign-in? Continue with Manus</button>
               {isAuthenticated ? <Link href="/account" className="text-xs font-semibold text-primary underline">Already signed in? Open my account</Link> : null}
             </form>
           </div>
