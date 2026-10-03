@@ -33,6 +33,8 @@ export default function CreateAccount() {
       const { base64: idPhotoBase64 } = await prepareIdPhoto(photo);
       const result = await register.mutateAsync({ name, email, phone, password, confirmPassword, idPhotoBase64 });
       sessionStorage.setItem("metropro-member-session", result.sessionToken);
+      sessionStorage.removeItem("metropro-admin-session");
+      sessionStorage.removeItem("metropro-driver-session");
       sessionStorage.removeItem("manus-cookie");
       await Promise.all([
         utils.auth.me.invalidate(),

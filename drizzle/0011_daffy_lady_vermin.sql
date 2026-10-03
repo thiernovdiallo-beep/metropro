@@ -1,0 +1,1 @@
+ALTER TABLE `driverProfiles` DROP COLUMN `licenseNumber`;

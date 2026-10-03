@@ -1,4 +1,6 @@
 import { PageShell } from "@/components/Brand";
+import { DriverAccountForm } from "@/components/DriverAccountForm";
+import { DriverPortrait } from "@/components/DriverPortrait";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDate, formatTime, money, occupancyLabel } from "@/lib/format";
@@ -105,8 +107,9 @@ export function AdminFleet() {
   const vans = trpc.admin.vehicles.useQuery();
   const drivers = trpc.admin.drivers.useQuery();
   const save = trpc.admin.saveVehicle.useMutation({ onSuccess: () => vans.refetch() });
-  const invite = trpc.admin.inviteDriver.useMutation({ onSuccess: () => drivers.refetch() });
+  const reinvite = trpc.admin.reissueDriverInvite.useMutation();
   const [code, setCode] = useState("MP-005");
+  const [setupLink, setSetupLink] = useState("");
   return (
     <PageShell>
       <div className="container py-8">
@@ -148,36 +151,28 @@ export function AdminFleet() {
         <h2 className="mt-8 font-serif text-xl">Drivers</h2>
         <div className="mt-3 grid gap-2">
           {(drivers.data ?? []).map(d => (
-            <div key={d.id} className="ticket-card p-3 text-sm">
-              {d.fullName} · {d.email} · {d.status}
+            <div key={d.id} className="ticket-card flex min-w-0 flex-wrap items-center gap-4 p-4 text-sm">
+              <DriverPortrait profileId={d.idLast4 ? d.id : null} name={d.fullName} />
+              <div className="min-w-0 flex-1">
+                <div className="font-medium">{d.fullName}</div>
+                <div className="break-words text-muted-foreground">{d.email} · {d.phone ?? "No phone"}</div>
+                <div className="text-xs text-muted-foreground">{d.idLast4 ? `ID ending ${d.idLast4}` : "Profile details pending"} · {d.loginReady ? "Ready to sign in" : d.userId ? "Awaiting password setup" : "No driver login"} · {d.status}</div>
+              </div>
+              {d.userId && !d.loginReady && d.status === "active" ? <Button type="button" variant="outline" size="sm" disabled={reinvite.isPending} onClick={async () => {
+                try { const result = await reinvite.mutateAsync({ profileId: d.id }); setSetupLink(`${window.location.origin}/driver/setup#token=${result.setupToken}`); toast.success("New one-time driver link ready to copy"); }
+                catch (cause) { toast.error(cause instanceof Error ? cause.message : "Could not reissue setup link"); }
+              }}>Reissue setup link</Button> : null}
             </div>
           ))}
         </div>
-        <InviteDriver onInvite={input => invite.mutate(input)} />
+        {setupLink ? <div className="ticket-card mt-4 max-w-2xl p-4 text-sm">
+          <p className="font-semibold">One-time link · copy now and share privately</p>
+          <Input className="mt-2" aria-label="Reissued driver setup link" readOnly value={setupLink} onFocus={event => event.currentTarget.select()} />
+          <Button className="mt-2" variant="outline" onClick={async () => { try { await navigator.clipboard.writeText(setupLink); toast.success("Copied"); } catch { toast.error("Select and copy the link above"); } }}>Copy link</Button>
+        </div> : null}
+        <DriverAccountForm drivers={drivers.data ?? []} onCreated={() => { void drivers.refetch(); setSetupLink(""); }} />
       </div>
     </PageShell>
-  );
-}
-
-function InviteDriver({
-  onInvite,
-}: {
-  onInvite: (v: { fullName: string; email: string }) => void;
-}) {
-  const [fullName, setName] = useState("");
-  const [email, setEmail] = useState("");
-  return (
-    <form
-      className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
-      onSubmit={e => {
-        e.preventDefault();
-        onInvite({ fullName, email });
-      }}
-    >
-      <Input placeholder="Driver name" value={fullName} onChange={e => setName(e.target.value)} required />
-      <Input placeholder="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-      <Button type="submit" className="min-h-10">Invite driver</Button>
-    </form>
   );
 }
 
@@ -291,8 +286,8 @@ export function AdminRoutes() {
         <DepartureForm
           routes={routes.data ?? []}
           vans={vans.data ?? []}
-          drivers={drivers.data ?? []}
-          onCreate={v => createDep.mutate(v)}
+          drivers={(drivers.data ?? []).filter(driver => driver.status === "active" && driver.loginReady)}
+          onCreate={v => createDep.mutate(v, { onError: error => toast.error(error.message) })}
         />
       </div>
     </PageShell>
@@ -420,6 +415,7 @@ function DepartureForm({
       className="mt-3 grid gap-2 md:grid-cols-2"
       onSubmit={e => {
         e.preventDefault();
+        if (!drivers.length || !vans.length || !routes.length) return;
         const start = new Date(departAt);
         const selected = routes.find(r => r.id === (routeId || routes[0]?.id));
         const minutes = selected?.estimatedMinutes ?? 540;
@@ -455,7 +451,8 @@ function DepartureForm({
         ))}
       </select>
       <Input type="datetime-local" value={departAt} onChange={e => setDepart(e.target.value)} required />
-      <Button type="submit">Create departure</Button>
+      {!drivers.length ? <p className="text-sm text-muted-foreground md:col-span-2">Create a driver account in Fleet and have the driver complete password setup before scheduling a departure.</p> : null}
+      <Button type="submit" disabled={!drivers.length || !vans.length || !routes.length}>Create departure</Button>
     </form>
   );
 }

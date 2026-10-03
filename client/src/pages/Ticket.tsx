@@ -19,6 +19,7 @@ export default function Ticket() {
     );
   }
   const { ticket, booking, passenger, trip } = data;
+  const boardable = booking.status === "confirmed" && ticket.status !== "voided";
   return (
     <PageShell>
       <div className="container max-w-md py-10">
@@ -48,9 +49,13 @@ export default function Ticket() {
             <div className="inline-flex rounded-full bg-secondary px-3 py-1 text-xs font-semibold uppercase tracking-wider">
               {ticket.status.replace("_", " ")}
             </div>
-            <div className="flex justify-center py-4">
-              <QRCodeSVG value={ticket.qrToken} size={180} />
-            </div>
+            {boardable ? <>
+              <div className="flex justify-center py-4">
+                <QRCodeSVG value={ticket.qrToken} size={180} />
+              </div>
+              <p className="text-center text-xs text-muted-foreground">Show this QR ticket when boarding. If the scanner cannot read it, give your driver this code:</p>
+              <p className="break-all rounded-lg bg-secondary p-3 text-center font-mono text-sm font-semibold tracking-wide" aria-label="Ticket code">{ticket.qrToken}</p>
+            </> : <p className="rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">This ticket is not valid for boarding. Check your booking status or contact support.</p>}
           </div>
         </div>
       </div>

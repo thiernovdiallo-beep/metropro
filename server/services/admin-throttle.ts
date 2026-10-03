@@ -20,12 +20,12 @@ function key(scope: string, value: string) {
 // The global key prevents cycling through new email/IP values to exhaust CPU.
 // The account window is short rather than a persistent attacker-resettable
 // lock on the real administrator's credential record.
-export async function throttleAdminAttempt(db: Database, source: string, email: string) {
+export async function throttleStaffAttempt(db: Database, source: string, email: string, staffRole: "admin" | "driver") {
   const now = new Date();
   const windows: Array<[string, number]> = [
-    [key("all", "admin"), 120],
-    [key("source", source || "unknown"), 30],
-    [key("email", email), 8],
+    [key("all", staffRole), 120],
+    [key(`source:${staffRole}`, source || "unknown"), 30],
+    [key(`email:${staffRole}`, email), 8],
   ];
   await db.transaction(async tx => {
     for (const [rateKey, limit] of windows) {
@@ -52,6 +52,10 @@ export async function throttleAdminAttempt(db: Database, source: string, email: 
       .where(lt(adminLoginThrottle.windowEndsAt, new Date(Date.now() - 24 * 60 * 60 * 1000)))
       .catch(() => undefined);
   }
+}
+
+export function throttleAdminAttempt(db: Database, source: string, email: string) {
+  return throttleStaffAttempt(db, source, email, "admin");
 }
 
 // A few independently rate-limited requests can still arrive together. Keep

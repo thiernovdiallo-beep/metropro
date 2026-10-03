@@ -103,28 +103,24 @@ export async function ensureSeed() {
         fullName: "Jordan Hale",
         email: "jordan.hale@metropro.example",
         phone: "212-555-0101",
-        licenseNumber: "NY-4421987",
         status: "active",
       },
       {
         fullName: "Priya Patel",
         email: "priya.patel@metropro.example",
         phone: "614-555-0102",
-        licenseNumber: "OH-8812044",
         status: "active",
       },
       {
         fullName: "Marcus Chen",
         email: "marcus.chen@metropro.example",
         phone: "212-555-0103",
-        licenseNumber: "NY-5503321",
         status: "active",
       },
       {
         fullName: "Alicia Romero",
         email: "alicia.romero@metropro.example",
         phone: "614-555-0104",
-        licenseNumber: "OH-7730012",
         status: "active",
       },
     ]);

@@ -32,6 +32,7 @@ export default function AdminLogin() {
     try {
       const result = await signIn.mutateAsync({ email, password });
       sessionStorage.setItem("metropro-admin-session", result.sessionToken);
+      sessionStorage.removeItem("metropro-driver-session");
       sessionStorage.removeItem("metropro-member-session");
       sessionStorage.removeItem("manus-cookie");
       sessionStorage.removeItem(ADMIN_LOGIN_INTENT_KEY);

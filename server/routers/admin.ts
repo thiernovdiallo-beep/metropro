@@ -1,5 +1,7 @@
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, gte, or } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, or } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { FIRST_PARTY_HEADER } from "@shared/const";
 import { z } from "zod";
 import {
   auditLogs,
@@ -7,9 +9,12 @@ import {
   cities,
   departures,
   dispatchMessages,
+  driverPrivateProfiles,
   driverProfiles,
+  driverSetupInvites,
   locations,
   maintenanceLogs,
+  memberCredentials,
   passengers,
   payments,
   refunds,
@@ -19,8 +24,13 @@ import {
   vehicles,
 } from "../../drizzle/schema";
 import { getDb, writeAudit } from "../db";
+import { insertId } from "../lib/mysql";
+import { createDriverSetupToken, DRIVER_SETUP_MS } from "../services/driver-auth";
+import { prepareDriverPrivate } from "../services/driver-private";
+import { normalizeMemberEmail } from "../services/member-auth";
+import { assertMemberAuthOrigin } from "../services/checkout-origin";
 import { getAnalytics, getOpsKpis } from "../services/analytics";
-import { assertVehicleAssignable } from "../services/dispatch";
+import { assertDriverAssignable, assertVehicleAssignable } from "../services/dispatch";
 import { restoreSoldSeats } from "../services/inventory";
 import { allocatePaidAcrossLegs } from "../services/pricing";
 import { TEMPLATES, notify } from "../services/notifications";
@@ -56,16 +66,16 @@ async function tripDetail(dep: typeof departures.$inferSelect) {
     }, 0);
   const pax = [];
   for (const b of tripBookings) {
-    const people = await db.select().from(passengers).where(eq(passengers.bookingId, b.id));
-    pax.push(
-      ...people.map(p => ({
-        ...p,
-        bookingNumber: b.bookingNumber,
-        paymentStatus: b.status,
-        contactPhone: b.contactPhone,
-        seatType: b.outboundDepartureId === dep.id ? p.outboundSeatType : p.returnSeatType ?? "standard",
-      }))
-    );
+    if (b.status !== "confirmed") continue;
+    const tripTickets = await db.select().from(tickets)
+      .where(and(eq(tickets.bookingId, b.id), eq(tickets.departureId, dep.id)));
+    for (const ticket of tripTickets) {
+      if (ticket.status === "voided") continue;
+      const [p] = await db.select().from(passengers).where(eq(passengers.id, ticket.passengerId)).limit(1);
+      if (p) pax.push({ ...p, status: ticket.status, boardedAt: ticket.boardedAt,
+        bookingNumber: b.bookingNumber, paymentStatus: b.status, contactPhone: b.contactPhone,
+        seatType: ticket.seatType });
+    }
   }
   return {
     departure: dep,
@@ -73,7 +83,7 @@ async function tripDetail(dep: typeof departures.$inferSelect) {
     origin,
     destination,
     vehicle,
-    driver,
+    driver: driver ? { id: driver.id, fullName: driver.fullName, phone: driver.phone, status: driver.status } : null,
     seatsSold: dep.seatsSold,
     seatsRemaining: Math.max(0, dep.capacity - dep.seatsSold - dep.seatsHeld),
     revenueCents: revenue,
@@ -188,7 +198,8 @@ export const adminRouter = router({
               .limit(1)
           )[0]
         : null;
-      return { vehicle: v, maintenance: logs, upcoming, driver };
+      return { vehicle: v, maintenance: logs, upcoming,
+        driver: driver ? { id: driver.id, fullName: driver.fullName, phone: driver.phone, status: driver.status } : null };
     }),
   saveVehicle: adminProcedure
     .input(
@@ -284,33 +295,86 @@ export const adminRouter = router({
   drivers: adminProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];
-    return db.select().from(driverProfiles);
+    const profiles = await db.select().from(driverProfiles);
+    const privateRows = await db.select({ profileId: driverPrivateProfiles.profileId, idLast4: driverPrivateProfiles.idLast4 }).from(driverPrivateProfiles);
+    const credentials = await db.select({ userId: memberCredentials.userId }).from(memberCredentials);
+    const ids = new Map(privateRows.map(row => [row.profileId, row.idLast4]));
+    const activated = new Set(credentials.map(row => row.userId));
+    return profiles.map(profile => ({
+      ...profile,
+      idLast4: ids.get(profile.id) ?? null,
+      loginReady: profile.userId !== null && activated.has(profile.userId),
+    }));
   }),
   inviteDriver: adminProcedure
     .input(
       z.object({
-        fullName: z.string().min(2),
-        email: z.string().email(),
-        phone: z.string().optional(),
-        licenseNumber: z.string().optional(),
+        fullName: z.string().trim().min(2).max(160),
+        email: z.string().trim().email().max(320),
+        phone: z.string().trim().min(7).max(32),
+        idNumber: z.string().trim().min(4).max(64),
+        photoBase64: z.string().min(32).max(2_800_000),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-      await db.insert(driverProfiles).values({
-        fullName: input.fullName,
-        email: input.email.toLowerCase(),
-        phone: input.phone ?? null,
-        licenseNumber: input.licenseNumber ?? null,
-        status: "active",
-      });
-      const [user] = await db.select().from(users).where(eq(users.email, input.email.toLowerCase())).limit(1);
-      if (user) {
-        await db.update(users).set({ role: "driver" }).where(eq(users.id, user.id));
+      const email = normalizeMemberEmail(input.email);
+      assertMemberAuthOrigin(ctx.req.headers.origin, ctx.req.headers["sec-fetch-site"], ctx.req.get(FIRST_PARTY_HEADER));
+      const details = prepareDriverPrivate(input.idNumber, input.photoBase64);
+      const invite = createDriverSetupToken();
+      try {
+        const result = await db.transaction(async tx => {
+          const [existingUser] = await tx.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+          if (existingUser) throw new TRPCError({ code: "CONFLICT", message: "This email already belongs to an account. Driver access cannot be assigned to a customer account." });
+          const [existingProfile] = await tx.select().from(driverProfiles).where(eq(driverProfiles.email, email)).limit(1).for("update");
+          if (existingProfile?.userId || existingProfile?.status === "inactive") {
+            throw new TRPCError({ code: "CONFLICT", message: "This driver profile is already linked or inactive." });
+          }
+          const newUserId = insertId(await tx.insert(users).values({
+            openId: `local_driver_${randomUUID()}`, name: input.fullName, email, phone: input.phone,
+            loginMethod: "password", role: "driver", lastSignedIn: new Date(),
+          }));
+          const profileId = existingProfile?.id ?? insertId(await tx.insert(driverProfiles).values({
+            fullName: input.fullName, email, phone: input.phone, status: "active", userId: newUserId,
+          }));
+          if (existingProfile) await tx.update(driverProfiles).set({
+            userId: newUserId, fullName: input.fullName, phone: input.phone,
+          }).where(eq(driverProfiles.id, existingProfile.id));
+          await tx.insert(driverPrivateProfiles).values({ profileId, ...details });
+          await tx.insert(driverSetupInvites).values({
+            userId: newUserId, tokenHash: invite.hash,
+            expiresAt: new Date(Date.now() + DRIVER_SETUP_MS),
+          });
+          return { profileId, expiresAt: new Date(Date.now() + DRIVER_SETUP_MS) };
+        });
+        await writeAudit(ctx.user.id, "driver.account.create", "driver", result.profileId);
+        return { ...result, setupToken: invite.token };
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
+        throw new TRPCError({ code: "CONFLICT", message: "Could not create this driver. Check whether the email is already in use." });
       }
-      await writeAudit(ctx.user.id, "driver.invite", "driver", input.email);
-      return { ok: true };
+    }),
+  reissueDriverInvite: adminProcedure.input(z.object({ profileId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      assertMemberAuthOrigin(ctx.req.headers.origin, ctx.req.headers["sec-fetch-site"], ctx.req.get(FIRST_PARTY_HEADER));
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const invite = createDriverSetupToken();
+      const expiresAt = new Date(Date.now() + DRIVER_SETUP_MS);
+      await db.transaction(async tx => {
+        const [profile] = await tx.select().from(driverProfiles).where(eq(driverProfiles.id, input.profileId)).limit(1).for("update");
+        if (!profile?.userId || profile.status !== "active") throw new TRPCError({ code: "BAD_REQUEST", message: "No active driver account to invite." });
+        const [user] = await tx.select().from(users).where(eq(users.id, profile.userId)).limit(1);
+        const [credential] = await tx.select({ id: memberCredentials.id }).from(memberCredentials)
+          .where(eq(memberCredentials.userId, profile.userId)).limit(1);
+        if (user?.role !== "driver" || credential) throw new TRPCError({ code: "BAD_REQUEST", message: "Driver setup is already complete or the account is unavailable." });
+        await tx.update(driverSetupInvites).set({ consumedAt: new Date() })
+          .where(and(eq(driverSetupInvites.userId, profile.userId), isNull(driverSetupInvites.consumedAt)));
+        await tx.insert(driverSetupInvites).values({ userId: profile.userId, tokenHash: invite.hash, expiresAt });
+      });
+      await writeAudit(ctx.user.id, "driver.account.reinvite", "driver", input.profileId);
+      return { setupToken: invite.token, expiresAt };
     }),
   cities: adminProcedure.query(async () => {
     const db = await getDb();
@@ -387,6 +451,8 @@ export const adminRouter = router({
       const departAt = new Date(input.departAt);
       const arriveAt = new Date(input.arriveAt);
       const vehicle = await assertVehicleAssignable(input.vehicleId, departAt, arriveAt);
+      try { await assertDriverAssignable(input.driverId, departAt, arriveAt); }
+      catch (error) { throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Driver unavailable" }); }
       const settings = await getSettings();
       await db.insert(departures).values({
         routeId: input.routeId,
@@ -417,6 +483,8 @@ export const adminRouter = router({
       const [dep] = await db.select().from(departures).where(eq(departures.id, input.departureId)).limit(1);
       if (!dep) throw new TRPCError({ code: "NOT_FOUND" });
       await assertVehicleAssignable(input.vehicleId, dep.departAt, dep.arriveAt, dep.id);
+      try { await assertDriverAssignable(input.driverId, dep.departAt, dep.arriveAt, dep.id); }
+      catch (error) { throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Driver unavailable" }); }
       await db
         .update(departures)
         .set({ vehicleId: input.vehicleId, driverId: input.driverId })

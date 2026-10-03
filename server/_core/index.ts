@@ -10,6 +10,10 @@ import { serveStatic, setupVite } from "./vite";
 import { ensureSeed } from "../seed";
 import { runReminders } from "../services/reminders";
 import { getMemberIdPhoto } from "../services/member-profile";
+import { getDriverPortrait } from "../services/driver-private";
+import { driverProfiles } from "../../drizzle/schema";
+import { getDb } from "../db";
+import { eq } from "drizzle-orm";
 import { sdk } from "./sdk";
 
 async function startServer() {
@@ -47,6 +51,30 @@ async function startServer() {
       res.type(photo.mimeType).send(photo.bytes);
     } catch (error) {
       console.error("[member ID] secure read failed", error instanceof Error ? error.name : "unknown");
+      res.status(404).end();
+    }
+  });
+
+  app.get("/api/driver-photo/:profileId", async (req, res) => {
+    res.set("Cache-Control", "private, no-store, max-age=0");
+    res.set("X-Content-Type-Options", "nosniff");
+    res.set("Referrer-Policy", "no-referrer");
+    try {
+      const viewer = await sdk.authenticateRequest(req);
+      const profileId = Number(req.params.profileId);
+      if (viewer.isCron || !Number.isSafeInteger(profileId) || profileId < 1) { res.status(404).end(); return; }
+      const db = await getDb();
+      if (!db) { res.status(404).end(); return; }
+      const [profile] = await db.select({ userId: driverProfiles.userId, status: driverProfiles.status })
+        .from(driverProfiles).where(eq(driverProfiles.id, profileId)).limit(1);
+      if (!profile || (viewer.role !== "admin" &&
+        (viewer.role !== "driver" || profile.userId !== viewer.id || profile.status !== "active"))) {
+        res.status(404).end(); return;
+      }
+      const image = await getDriverPortrait(profileId);
+      if (!image) { res.status(404).end(); return; }
+      res.type(image.mimeType).send(image.bytes);
+    } catch {
       res.status(404).end();
     }
   });

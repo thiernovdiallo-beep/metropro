@@ -65,7 +65,7 @@ export function SiteHeader() {
           ) : null}
         </nav>
         <div className="flex items-center gap-2">
-          {location === "/admin/login" || location === "/admin/setup" ? null : location === "/" ? (
+          {location === "/admin/login" || location === "/admin/setup" || location === "/driver/login" || location === "/driver/setup" ? null : location === "/" ? (
             <Button onClick={memberEntry}>Member sign in</Button>
           ) : isAuthenticated ? (
             <>
@@ -109,7 +109,10 @@ export function SiteFooter() {
         </div>
       </div>
       <div className="border-t border-border/60">
-        <div className="container flex justify-end">
+        <div className="container flex justify-end gap-6">
+          <Link href="/driver/login" className="inline-flex min-h-11 items-center text-xs text-muted-foreground/90 underline-offset-4 hover:text-primary hover:underline focus-visible:rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+            Driver sign in
+          </Link>
           <Link
             href="/admin/login"
             className="inline-flex min-h-11 items-center text-xs text-muted-foreground/90 underline-offset-4 hover:text-primary hover:underline focus-visible:rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"

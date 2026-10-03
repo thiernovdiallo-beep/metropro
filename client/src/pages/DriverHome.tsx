@@ -1,8 +1,8 @@
 import { PageShell } from "@/components/Brand";
+import { DriverPortrait } from "@/components/DriverPortrait";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatTime } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
-import { startLogin } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Link } from "wouter";
 
@@ -16,9 +16,7 @@ export default function DriverHome() {
       <PageShell>
         <div className="container py-16">
           <h1 className="font-serif text-3xl">Driver portal</h1>
-          <Button className="mt-4" onClick={() => startLogin()}>
-            Sign in
-          </Button>
+          <Link href="/driver/login"><Button className="mt-4">Driver sign in</Button></Link>
         </div>
       </PageShell>
     );
@@ -27,6 +25,15 @@ export default function DriverHome() {
   return (
     <PageShell>
       <div className="container py-10">
+        {home.data?.profile ? <section className="ticket-card mb-7 flex flex-wrap items-center gap-4 p-5">
+          <DriverPortrait profileId={home.data.profile.id} name={home.data.profile.fullName} className="h-20 w-20" />
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Driver profile</p>
+            <h1 className="font-serif text-2xl">{home.data.profile.fullName}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">{home.data.profile.phone ?? "No phone saved"} · {home.data.profile.email}</p>
+            <p className="text-xs text-muted-foreground">{home.data.profile.idLast4 ? `ID ending ${home.data.profile.idLast4}` : "ID pending"}</p>
+          </div>
+        </section> : null}
         <h1 className="font-serif text-3xl">Today’s trip</h1>
         {today ? (
           <div className="ticket-card mt-5 p-5">

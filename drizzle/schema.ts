@@ -93,7 +93,6 @@ export const driverProfiles = mysqlTable(
     fullName: varchar("fullName", { length: 160 }).notNull(),
     email: varchar("email", { length: 320 }).notNull(),
     phone: varchar("phone", { length: 32 }),
-    licenseNumber: varchar("licenseNumber", { length: 64 }),
     status: mysqlEnum("status", ["active", "inactive"]).default("active").notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -103,6 +102,28 @@ export const driverProfiles = mysqlTable(
     index("driverProfiles_userId_idx").on(table.userId),
   ]
 );
+
+// Driver details are private and never served through public object storage.
+export const driverPrivateProfiles = mysqlTable("driverPrivateProfiles", {
+  profileId: int("profileId").primaryKey().references(() => driverProfiles.id, { onDelete: "cascade" }),
+  idCiphertext: varchar("idCiphertext", { length: 512 }).notNull(),
+  idLast4: varchar("idLast4", { length: 4 }).notNull(),
+  photoCiphertext: longtext("photoCiphertext").notNull(),
+  photoMimeType: varchar("photoMimeType", { length: 32 }).notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const driverSetupInvites = mysqlTable("driverSetupInvites", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+  expiresAt: datetime("expiresAt", { mode: "date" }).notNull(),
+  consumedAt: datetime("consumedAt", { mode: "date" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("driverSetupInvites_tokenHash_unique").on(table.tokenHash),
+  index("driverSetupInvites_userId_idx").on(table.userId),
+]);
 
 export const vehicles = mysqlTable(
   "vehicles",
@@ -304,9 +325,10 @@ export const tickets = mysqlTable(
     departureId: int("departureId").notNull(),
     qrToken: varchar("qrToken", { length: 48 }).notNull(),
     seatType: mysqlEnum("seatType", ["standard", "front"]).default("standard").notNull(),
-    status: mysqlEnum("status", ["booked", "checked_in", "boarded", "voided"])
+    status: mysqlEnum("status", ["booked", "checked_in", "boarded", "no_show", "voided"])
       .default("booked")
       .notNull(),
+    boardedAt: datetime("boardedAt", { mode: "date" }),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   table => [

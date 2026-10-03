@@ -10,6 +10,7 @@ import { adminAuthRouter } from "./routers/admin-auth";
 import { adminRouter } from "./routers/admin";
 import { bookingRouter } from "./routers/booking";
 import { driverRouter } from "./routers/driver";
+import { driverAuthRouter } from "./routers/driver-auth";
 import { memberAuthRouter } from "./routers/member-auth";
 import { publicRouter } from "./routers/public";
 import { assertMemberAuthOrigin } from "./services/checkout-origin";
@@ -36,6 +37,7 @@ export const appRouter = router({
   }),
   memberAuth: memberAuthRouter,
   adminAuth: adminAuthRouter,
+  driverAuth: driverAuthRouter,
   public: publicRouter,
   booking: bookingRouter,
   account: accountRouter,

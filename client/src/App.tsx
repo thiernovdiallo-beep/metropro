@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AdminGuard } from "@/components/AdminGuard";
+import { DriverGuard } from "@/components/DriverGuard";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -16,6 +17,8 @@ import Account from "./pages/Account";
 import Membership from "./pages/Membership";
 import DriverHome from "./pages/DriverHome";
 import DriverTrip from "./pages/DriverTrip";
+import DriverLogin from "./pages/DriverLogin";
+import DriverSetup from "./pages/DriverSetup";
 import AdminLogin from "./pages/AdminLogin";
 import AdminSetup from "./pages/AdminSetup";
 import AdminHome from "./pages/AdminHome";
@@ -41,8 +44,10 @@ function Router() {
       <Route path="/ticket/:token" component={Ticket} />
       <Route path="/membership" component={Membership} />
       <Route path="/account/:section?" component={Account} />
-      <Route path="/driver" component={DriverHome} />
-      <Route path="/driver/trip/:id" component={DriverTrip} />
+      <Route path="/driver/login" component={DriverLogin} />
+      <Route path="/driver/setup" component={DriverSetup} />
+      <Route path="/driver"><DriverGuard><DriverHome /></DriverGuard></Route>
+      <Route path="/driver/trip/:id"><DriverGuard><DriverTrip /></DriverGuard></Route>
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin/setup" component={AdminSetup} />
       <Route path="/admin"><AdminGuard><AdminHome /></AdminGuard></Route>

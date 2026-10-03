@@ -19,6 +19,8 @@
     { "path": "/account/support", "title": "Customer support" },
     { "path": "/account/settings", "title": "Member profile and private ID upload" },
     { "path": "/driver", "title": "Driver home" },
+    { "path": "/driver/login", "title": "Driver sign in" },
+    { "path": "/driver/setup", "title": "Driver password setup" },
     { "path": "/driver/trip/:id", "title": "Trip manifest" },
     { "path": "/admin/login", "title": "Admin sign in" },
     { "path": "/admin/setup", "title": "Admin password setup" },

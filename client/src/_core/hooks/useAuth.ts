@@ -44,6 +44,7 @@ export function useAuth(options?: UseAuthOptions) {
       // backend cookie is cleared by the logout mutation.
       try {
         sessionStorage.removeItem("metropro-admin-session");
+        sessionStorage.removeItem("metropro-driver-session");
         sessionStorage.removeItem("metropro-member-session");
         sessionStorage.removeItem("manus-cookie");
       } catch {}

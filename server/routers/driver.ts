@@ -1,11 +1,12 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import {
   bookings,
   cities,
   departures,
   dispatchMessages,
+  driverPrivateProfiles,
   driverProfiles,
   locations,
   passengers,
@@ -14,12 +15,13 @@ import {
   vehicles,
 } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { affectedRows } from "../lib/mysql";
 import { setVehicleStatus } from "../services/dispatch";
 import { TEMPLATES, notify } from "../services/notifications";
 import { driverProcedure, router } from "../_core/trpc";
 import type { User } from "../../drizzle/schema";
 
-async function driverIdForUser(userId: number, email?: string | null) {
+async function driverIdForUser(userId: number) {
   const db = await getDb();
   if (!db) return null;
   const [byUser] = await db
@@ -27,16 +29,7 @@ async function driverIdForUser(userId: number, email?: string | null) {
     .from(driverProfiles)
     .where(eq(driverProfiles.userId, userId))
     .limit(1);
-  if (byUser) return byUser;
-  if (email) {
-    const [byEmail] = await db
-      .select()
-      .from(driverProfiles)
-      .where(eq(driverProfiles.email, email.toLowerCase()))
-      .limit(1);
-    return byEmail ?? null;
-  }
-  return null;
+  return byUser?.status === "active" ? byUser : null;
 }
 
 async function requireAssignedDeparture(user: User, departureId: number) {
@@ -45,7 +38,7 @@ async function requireAssignedDeparture(user: User, departureId: number) {
   const [dep] = await db.select().from(departures).where(eq(departures.id, departureId)).limit(1);
   if (!dep) throw new TRPCError({ code: "NOT_FOUND" });
   if (user.role === "admin") return { db, dep };
-  const profile = await driverIdForUser(user.id, user.email);
+  const profile = await driverIdForUser(user.id);
   if (!profile || dep.driverId !== profile.id) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Not assigned to this trip" });
   }
@@ -75,14 +68,15 @@ async function tripBundle(dep: typeof departures.$inferSelect) {
   const [driver] = dep.driverId
     ? await db.select().from(driverProfiles).where(eq(driverProfiles.id, dep.driverId)).limit(1)
     : [null];
-  return { departure: dep, route, origin, destination, pickup, dropoff, vehicle, driver };
+  return { departure: dep, route, origin, destination, pickup, dropoff, vehicle,
+    driver: driver ? { id: driver.id, fullName: driver.fullName, phone: driver.phone, status: driver.status } : null };
 }
 
 export const driverRouter = router({
   home: driverProcedure.query(async ({ ctx }) => {
     const db = await getDb();
     if (!db) return { today: null, upcoming: [], vehicle: null };
-    const profile = await driverIdForUser(ctx.user.id, ctx.user.email);
+    const profile = await driverIdForUser(ctx.user.id);
     if (!profile && ctx.user.role !== "admin") {
       return { today: null, upcoming: [], vehicle: null, message: "No driver profile linked." };
     }
@@ -101,7 +95,11 @@ export const driverRouter = router({
       .slice(0, 8);
     const today = todayRows[0] ? await tripBundle(todayRows[0]) : null;
     const upcoming = await Promise.all(upcomingRows.map(tripBundle));
+    const [privateProfile] = profile ? await db.select({ idLast4: driverPrivateProfiles.idLast4 })
+      .from(driverPrivateProfiles).where(eq(driverPrivateProfiles.profileId, profile.id)).limit(1) : [null];
     return {
+      profile: profile ? { id: profile.id, fullName: profile.fullName, phone: profile.phone,
+        email: profile.email, idLast4: privateProfile?.idLast4 ?? null } : null,
       today: today
         ? {
             ...today,
@@ -129,10 +127,10 @@ export const driverRouter = router({
           id: p.id,
           firstName: p.firstName,
           lastName: p.lastName,
-          status: p.status,
+          status: t.status,
+          boardedAt: t.boardedAt,
           phone: b.contactPhone,
           bookingNumber: b.bookingNumber,
-          qrToken: t.qrToken,
           ticketId: t.id,
           seatType: t.seatType,
         });
@@ -140,55 +138,76 @@ export const driverRouter = router({
       return { ...bundle, manifest };
     }),
   scan: driverProcedure
-    .input(z.object({ qrToken: z.string(), departureId: z.number() }))
+    .input(z.object({ qrToken: z.string().trim().min(12).max(48), departureId: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
-      const { db } = await requireAssignedDeparture(ctx.user, input.departureId);
-      const [ticket] = await db.select().from(tickets).where(eq(tickets.qrToken, input.qrToken)).limit(1);
-      if (!ticket || ticket.departureId !== input.departureId || ticket.status === "voided") {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Ticket not found for this trip" });
+      const { db, dep } = await requireAssignedDeparture(ctx.user, input.departureId);
+      if (dep.status !== "boarding") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "This trip is not open for boarding." });
       }
-      const [booking] = await db.select().from(bookings).where(eq(bookings.id, ticket.bookingId)).limit(1);
-      if (!booking || booking.status !== "confirmed") {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Booking is not confirmed" });
-      }
-      const [p] = await db.select().from(passengers).where(eq(passengers.id, ticket.passengerId)).limit(1);
-      if (!p) throw new TRPCError({ code: "NOT_FOUND" });
-      const next =
-        p.status === "booked" ? "checked_in" : p.status === "checked_in" ? "boarded" : p.status;
-      await db.update(passengers).set({ status: next }).where(eq(passengers.id, p.id));
-      await db
-        .update(tickets)
-        .set({ status: next as "booked" | "checked_in" | "boarded" })
-        .where(eq(tickets.id, ticket.id));
-      return { passenger: { id: p.id, firstName: p.firstName, lastName: p.lastName, status: next } };
+      return db.transaction(async tx => {
+        const [ticket] = await tx.select().from(tickets).where(eq(tickets.qrToken, input.qrToken)).limit(1).for("update");
+        if (!ticket || ticket.departureId !== input.departureId || ticket.status === "voided") {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Ticket not found for this trip." });
+        }
+        const [currentTrip] = await tx.select({ status: departures.status }).from(departures)
+          .where(eq(departures.id, input.departureId)).limit(1).for("update");
+        if (currentTrip?.status !== "boarding") throw new TRPCError({ code: "BAD_REQUEST", message: "Boarding has closed." });
+        const [booking] = await tx.select({ status: bookings.status }).from(bookings)
+          .where(eq(bookings.id, ticket.bookingId)).limit(1);
+        if (booking?.status !== "confirmed") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "This ticket has not been paid or has been canceled." });
+        }
+        const [passenger] = await tx.select().from(passengers).where(eq(passengers.id, ticket.passengerId)).limit(1);
+        if (!passenger) throw new TRPCError({ code: "NOT_FOUND" });
+        if (ticket.status === "boarded") {
+          return { passenger: { id: passenger.id, firstName: passenger.firstName,
+            lastName: passenger.lastName, status: "boarded" as const }, alreadyBoarded: true };
+        }
+        await tx.update(tickets).set({ status: "boarded", boardedAt: new Date() }).where(eq(tickets.id, ticket.id));
+        await tx.update(passengers).set({ status: "boarded" }).where(eq(passengers.id, passenger.id));
+        return { passenger: { id: passenger.id, firstName: passenger.firstName,
+          lastName: passenger.lastName, status: "boarded" as const }, alreadyBoarded: false };
+      });
     }),
   setPassengerStatus: driverProcedure
     .input(
       z.object({
         passengerId: z.number(),
         departureId: z.number(),
-        status: z.enum(["booked", "checked_in", "boarded", "no_show"]),
+        status: z.enum(["booked", "checked_in", "no_show"]),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { db } = await requireAssignedDeparture(ctx.user, input.departureId);
-      const [ticket] = await db
-        .select()
-        .from(tickets)
-        .where(and(eq(tickets.passengerId, input.passengerId), eq(tickets.departureId, input.departureId)))
-        .limit(1);
-      if (!ticket || ticket.status === "voided") throw new TRPCError({ code: "NOT_FOUND" });
-      await db.update(passengers).set({ status: input.status }).where(eq(passengers.id, input.passengerId));
-      const ticketStatus =
-        input.status === "no_show" ? "booked" : (input.status as "booked" | "checked_in" | "boarded");
-      await db.update(tickets).set({ status: ticketStatus }).where(eq(tickets.id, ticket.id));
-      return { ok: true };
+      const { db, dep } = await requireAssignedDeparture(ctx.user, input.departureId);
+      if (dep.status !== "boarding" && !(dep.status === "departed" && input.status === "no_show")) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "This trip is not open for manual check-in." });
+      }
+      return db.transaction(async tx => {
+        const [ticket] = await tx.select().from(tickets)
+          .where(and(eq(tickets.passengerId, input.passengerId), eq(tickets.departureId, input.departureId)))
+          .limit(1).for("update");
+        if (!ticket || ticket.status === "voided") throw new TRPCError({ code: "NOT_FOUND" });
+        if (ticket.status === "boarded") throw new TRPCError({ code: "BAD_REQUEST", message: "Boarded attendance cannot be changed here." });
+        const [currentTrip] = await tx.select({ status: departures.status }).from(departures)
+          .where(eq(departures.id, input.departureId)).limit(1).for("update");
+        if (currentTrip?.status !== "boarding" && !(currentTrip?.status === "departed" && input.status === "no_show")) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Check-in has closed." });
+        }
+        const [booking] = await tx.select({ status: bookings.status }).from(bookings)
+          .where(eq(bookings.id, ticket.bookingId)).limit(1);
+        if (booking?.status !== "confirmed") throw new TRPCError({ code: "BAD_REQUEST", message: "Booking is not confirmed." });
+        await tx.update(tickets).set({ status: input.status, boardedAt: null }).where(eq(tickets.id, ticket.id));
+        await tx.update(passengers).set({ status: input.status }).where(eq(passengers.id, input.passengerId));
+        return { ok: true };
+      });
     }),
   startTrip: driverProcedure
     .input(z.object({ departureId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const { db, dep } = await requireAssignedDeparture(ctx.user, input.departureId);
-      await db.update(departures).set({ status: "boarding" }).where(eq(departures.id, dep.id));
+      const changed = await db.update(departures).set({ status: "boarding" })
+        .where(and(eq(departures.id, dep.id), inArray(departures.status, ["scheduled", "delayed"])));
+      if (!affectedRows(changed)) throw new TRPCError({ code: "BAD_REQUEST", message: "This trip cannot be opened for boarding." });
       if (dep.vehicleId) await setVehicleStatus(dep.vehicleId, "assigned");
       return { ok: true };
     }),
@@ -196,7 +215,9 @@ export const driverRouter = router({
     .input(z.object({ departureId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const { db, dep } = await requireAssignedDeparture(ctx.user, input.departureId);
-      await db.update(departures).set({ status: "departed" }).where(eq(departures.id, dep.id));
+      const changed = await db.update(departures).set({ status: "departed" })
+        .where(and(eq(departures.id, dep.id), eq(departures.status, "boarding")));
+      if (!affectedRows(changed)) throw new TRPCError({ code: "BAD_REQUEST", message: "Open boarding before marking departure." });
       if (dep.vehicleId) await setVehicleStatus(dep.vehicleId, "in_transit");
       return { ok: true };
     }),
@@ -204,10 +225,11 @@ export const driverRouter = router({
     .input(z.object({ departureId: z.number(), reason: z.string().min(3) }))
     .mutation(async ({ ctx, input }) => {
       const { db } = await requireAssignedDeparture(ctx.user, input.departureId);
-      await db
+      const changed = await db
         .update(departures)
         .set({ status: "delayed", delayReason: input.reason })
-        .where(eq(departures.id, input.departureId));
+        .where(and(eq(departures.id, input.departureId), inArray(departures.status, ["scheduled", "boarding", "delayed"])));
+      if (!affectedRows(changed)) throw new TRPCError({ code: "BAD_REQUEST", message: "Delay reporting is closed for this trip." });
       await db.insert(dispatchMessages).values({
         departureId: input.departureId,
         fromUserId: ctx.user.id,
@@ -254,7 +276,15 @@ export const driverRouter = router({
   reportVehicle: driverProcedure
     .input(z.object({ vehicleId: z.number(), departureId: z.number().optional(), message: z.string().min(3) }))
     .mutation(async ({ ctx, input }) => {
-      if (input.departureId) await requireAssignedDeparture(ctx.user, input.departureId);
+      if (ctx.user.role === "driver" && !input.departureId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Choose an assigned trip to report this vehicle." });
+      }
+      if (input.departureId) {
+        const { dep } = await requireAssignedDeparture(ctx.user, input.departureId);
+        if (ctx.user.role === "driver" && dep.vehicleId !== input.vehicleId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "This vehicle is not assigned to your trip." });
+        }
+      }
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       await db.insert(dispatchMessages).values({
@@ -270,14 +300,18 @@ export const driverRouter = router({
     .input(z.object({ departureId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const { db } = await requireAssignedDeparture(ctx.user, input.departureId);
-      await db.update(departures).set({ status: "arrived" }).where(eq(departures.id, input.departureId));
+      const changed = await db.update(departures).set({ status: "arrived" })
+        .where(and(eq(departures.id, input.departureId), eq(departures.status, "departed")));
+      if (!affectedRows(changed)) throw new TRPCError({ code: "BAD_REQUEST", message: "Mark departure before arrival." });
       return { ok: true };
     }),
   completeTrip: driverProcedure
     .input(z.object({ departureId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const { db, dep } = await requireAssignedDeparture(ctx.user, input.departureId);
-      await db.update(departures).set({ status: "completed" }).where(eq(departures.id, dep.id));
+      const changed = await db.update(departures).set({ status: "completed" })
+        .where(and(eq(departures.id, dep.id), eq(departures.status, "arrived")));
+      if (!affectedRows(changed)) throw new TRPCError({ code: "BAD_REQUEST", message: "Mark arrival before completing the trip." });
       if (dep.vehicleId) await setVehicleStatus(dep.vehicleId, "available");
       return { ok: true };
     }),

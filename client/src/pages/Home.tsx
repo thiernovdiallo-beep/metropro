@@ -85,6 +85,8 @@ export default function Home() {
     try {
       const result = await signIn.mutateAsync({ email: memberEmail, password: memberPassword });
       sessionStorage.setItem("metropro-member-session", result.sessionToken);
+      sessionStorage.removeItem("metropro-admin-session");
+      sessionStorage.removeItem("metropro-driver-session");
       sessionStorage.removeItem("manus-cookie");
       setMemberPassword("");
       await Promise.all([
@@ -260,7 +262,7 @@ export default function Home() {
         {[
           ["Nine regular, one front", `Regular seats are ${money(standard)}; the front passenger seat is ${money(front)} for everyone.`],
           ["Member regular seat $100", `Membership is $25/month. Your own regular seat is ${money(member)}; companions pay standard fares.`],
-          ["QR boarding", "Show your ticket. Drivers scan. Status moves Booked → Checked In → Boarded."],
+          ["QR boarding", "Each paid passenger gets a QR ticket. Your assigned driver scans it to confirm you boarded."],
         ].map(([title, copy]) => (
           <div key={title} className="ticket-card p-6">
             <h2 className="font-serif text-xl">{title}</h2>
