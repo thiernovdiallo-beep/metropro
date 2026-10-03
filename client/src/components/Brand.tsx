@@ -65,7 +65,7 @@ export function SiteHeader() {
           ) : null}
         </nav>
         <div className="flex items-center gap-2">
-          {location === "/" ? (
+          {location === "/admin/login" ? null : location === "/" ? (
             <Button onClick={memberEntry}>Member sign in</Button>
           ) : isAuthenticated ? (
             <>
@@ -106,6 +106,16 @@ export function SiteFooter() {
         <div className="text-sm leading-relaxed text-muted-foreground">
           Payments by Stripe. Card numbers are never stored by Metro Pro. Membership is $25/month
           and discounts only the member's own regular seat, not the front seat.
+        </div>
+      </div>
+      <div className="border-t border-border/60">
+        <div className="container flex justify-end">
+          <Link
+            href="/admin/login"
+            className="inline-flex min-h-11 items-center text-xs text-muted-foreground/90 underline-offset-4 hover:text-primary hover:underline focus-visible:rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            Admin sign in
+          </Link>
         </div>
       </div>
     </footer>

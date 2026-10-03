@@ -20,6 +20,7 @@
     { "path": "/account/settings", "title": "Member profile and private ID upload" },
     { "path": "/driver", "title": "Driver home" },
     { "path": "/driver/trip/:id", "title": "Trip manifest" },
+    { "path": "/admin/login", "title": "Admin sign in" },
     { "path": "/admin", "title": "Operations" },
     { "path": "/admin/trips/:id", "title": "Trip detail" },
     { "path": "/admin/dispatch", "title": "Dispatch board" },

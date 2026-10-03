@@ -1,4 +1,5 @@
 import { PageShell } from "@/components/Brand";
+import { ADMIN_LOGIN_INTENT_KEY } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +12,7 @@ import { Link, useLocation } from "wouter";
 
 export default function Home() {
   const [, setLocation] = useLocation();
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated, loading } = useAuth();
   const utils = trpc.useUtils();
   const signIn = trpc.memberAuth.signIn.useMutation();
   const citiesQuery = trpc.public.cities.useQuery();
@@ -57,6 +58,12 @@ export default function Home() {
   const standard = settingsQuery.data?.standardFareCents ?? 15000;
   const member = settingsQuery.data?.memberFareCents ?? 10000;
   const front = settingsQuery.data?.frontFareCents ?? 20000;
+
+  useEffect(() => {
+    if (loading || sessionStorage.getItem(ADMIN_LOGIN_INTENT_KEY) !== "1") return;
+    sessionStorage.removeItem(ADMIN_LOGIN_INTENT_KEY);
+    setLocation(user?.role === "admin" ? "/admin" : "/admin/login");
+  }, [loading, user?.role, setLocation]);
 
   useEffect(() => {
     if (isAuthenticated && sessionStorage.getItem("metropro-member-onboarding") === "1") {

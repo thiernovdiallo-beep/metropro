@@ -1,5 +1,6 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AdminGuard } from "@/components/AdminGuard";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -15,6 +16,7 @@ import Account from "./pages/Account";
 import Membership from "./pages/Membership";
 import DriverHome from "./pages/DriverHome";
 import DriverTrip from "./pages/DriverTrip";
+import AdminLogin from "./pages/AdminLogin";
 import AdminHome from "./pages/AdminHome";
 import {
   AdminAnalytics,
@@ -40,14 +42,15 @@ function Router() {
       <Route path="/account/:section?" component={Account} />
       <Route path="/driver" component={DriverHome} />
       <Route path="/driver/trip/:id" component={DriverTrip} />
-      <Route path="/admin" component={AdminHome} />
-      <Route path="/admin/trips/:id" component={AdminTrip} />
-      <Route path="/admin/dispatch" component={AdminDispatch} />
-      <Route path="/admin/fleet/:id" component={AdminVehicle} />
-      <Route path="/admin/fleet" component={AdminFleet} />
-      <Route path="/admin/routes" component={AdminRoutes} />
-      <Route path="/admin/analytics" component={AdminAnalytics} />
-      <Route path="/admin/settings" component={AdminSettings} />
+      <Route path="/admin/login" component={AdminLogin} />
+      <Route path="/admin"><AdminGuard><AdminHome /></AdminGuard></Route>
+      <Route path="/admin/trips/:id"><AdminGuard><AdminTrip /></AdminGuard></Route>
+      <Route path="/admin/dispatch"><AdminGuard><AdminDispatch /></AdminGuard></Route>
+      <Route path="/admin/fleet/:id"><AdminGuard><AdminVehicle /></AdminGuard></Route>
+      <Route path="/admin/fleet"><AdminGuard><AdminFleet /></AdminGuard></Route>
+      <Route path="/admin/routes"><AdminGuard><AdminRoutes /></AdminGuard></Route>
+      <Route path="/admin/analytics"><AdminGuard><AdminAnalytics /></AdminGuard></Route>
+      <Route path="/admin/settings"><AdminGuard><AdminSettings /></AdminGuard></Route>
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
