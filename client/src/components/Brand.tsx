@@ -67,12 +67,12 @@ export function SiteHeader() {
     : <button type="button" onClick={memberEntry} className={navClass(false)}>{isAuthenticated ? "My trips" : "Sign In"}</button>);
 
   return <header className="relative z-40 border-b border-border bg-white text-foreground">
-    <div className="container flex min-h-16 items-center justify-between gap-3 py-2 lg:min-h-20">
+    <div className="container flex min-h-16 items-center justify-between gap-3 py-2 lg:grid lg:min-h-20 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
       <Link href="/" className="shrink-0 no-underline focus-visible:rounded-xl" aria-label="Metro Pro home"><Wordmark /></Link>
-      <nav className="hidden items-center gap-1 lg:flex" aria-label={isOps ? "Operations navigation" : "Main navigation"}>
+      <nav className="hidden items-center gap-1 lg:flex lg:justify-self-center" aria-label={isOps ? "Operations navigation" : "Main navigation"}>
         {links.map(item => renderLink(item))}
       </nav>
-      <div className="ml-auto hidden items-center gap-2 lg:flex">
+      <div className="ml-auto hidden items-center gap-2 lg:ml-0 lg:flex lg:justify-self-end">
         {authAction}
         <a href="/#trip-search" className="metro-action-link metro-action-link--primary min-h-11 px-5 text-sm font-bold uppercase tracking-wide">Book Now</a>
       </div>
