@@ -45,7 +45,7 @@ export default function Ticket() {
               Drop-off {trip.dropoff?.label}
             </div>
             <div className="text-sm">Passengers on booking: {booking.passengerCount}</div>
-            <div className="text-sm font-semibold text-primary">Seat: {ticket.seatType === "front" ? "Front passenger seat" : "Regular passenger seat"}</div>
+            <div className="text-sm font-semibold text-primary">{data.seatNumber ? `Seat ${data.seatNumber}` : `Seat: ${ticket.seatType === "front" ? "Front passenger seat" : "Regular passenger seat"}`}</div>
             <div className="inline-flex rounded-full bg-secondary px-3 py-1 text-xs font-semibold uppercase tracking-wider">
               {ticket.status.replace("_", " ")}
             </div>

@@ -1,11 +1,12 @@
 import { PageShell } from "@/components/Brand";
+import SeatMap from "@/components/SeatMap";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { money } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 
 type SeatType = "standard" | "front";
@@ -14,12 +15,27 @@ type Traveler = {
   lastName: string;
   outboundSeatType: SeatType;
   returnSeatType: SeatType | null;
+  seatNumber?: string;
+  returnSeatNumber?: string;
   isMemberTraveler: boolean;
 };
+type MapSeat = { seatNumber: string; seatType: SeatType; status: "available" | "taken" | "held" };
 
 function sameName(first: string, last: string, accountName?: string | null) {
   const normalize = (name: string) => name.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
   return Boolean(accountName && normalize(`${first} ${last}`) === normalize(accountName));
+}
+
+export function selectedLegIsAvailable(travelers: Traveler[], seats: readonly MapSeat[] | undefined, leg: "outbound" | "return") {
+  if (!seats) return false;
+  const byNumber = new Map(seats.map(seat => [seat.seatNumber, seat]));
+  const numbers = travelers.map(person => leg === "outbound" ? person.seatNumber : person.returnSeatNumber);
+  if (numbers.some(number => !number) || new Set(numbers).size !== travelers.length) return false;
+  return travelers.every(person => {
+    const number = leg === "outbound" ? person.seatNumber : person.returnSeatNumber;
+    const seat = byNumber.get(number!);
+    return seat?.status === "available" && seat.seatType === (leg === "outbound" ? person.outboundSeatType : person.returnSeatType);
+  });
 }
 
 export default function PassengerInfo() {
@@ -34,8 +50,8 @@ export default function PassengerInfo() {
   const outId = Number(params.get("out"));
   const retId = Number(params.get("ret"));
   const roundTrip = Boolean(retId);
-  const outwardSeats = trpc.public.seatOptions.useQuery({ departureId: outId }, { enabled: Boolean(outId) });
-  const returnSeats = trpc.public.seatOptions.useQuery({ departureId: retId }, { enabled: roundTrip });
+  const outMap = trpc.booking.getSeatMap.useQuery({ departureId: outId }, { enabled: outId > 0, refetchInterval: 15_000, refetchOnWindowFocus: true });
+  const retMap = trpc.booking.getSeatMap.useQuery({ departureId: retId }, { enabled: roundTrip, refetchInterval: 15_000, refetchOnWindowFocus: true });
   const pax = Math.min(10, Math.max(1, Number(params.get("pax") ?? 1) || 1));
   const [contactFirstName, setFirst] = useState(user?.name?.split(" ")[0] ?? "");
   const [contactLastName, setLast] = useState(user?.name?.split(" ").slice(1).join(" ") ?? "");
@@ -50,30 +66,47 @@ export default function PassengerInfo() {
     }))
   );
 
-  function updateTraveler(index: number, change: Partial<Traveler>) {
-    setTravelers(list => list.map((p, i) => i === index ? { ...p, ...change } : p));
-  }
-  function applySaved(i: number, firstName: string, lastName: string) {
-    updateTraveler(i, { firstName, lastName });
+  const updateTraveler = useCallback((index: number, change: Partial<Traveler>) => {
+    setTravelers(list => list.map((person, i) => i === index ? { ...person, ...change } : person));
+  }, []);
+  function applySaved(index: number, firstName: string, lastName: string) {
+    updateTraveler(index, { firstName, lastName });
   }
 
-  const outFront = travelers.filter(p => p.outboundSeatType === "front").length;
-  const retFront = travelers.filter(p => p.returnSeatType === "front").length;
-  const outAvailability = outwardSeats.data;
-  const retAvailability = returnSeats.data;
-  const seatsReady = Boolean(outAvailability && (!roundTrip || retAvailability));
-  const outwardFits = Boolean(outAvailability && outFront <= outAvailability.front && pax - outFront <= outAvailability.standard);
-  const returnFits = !roundTrip || Boolean(retAvailability && retFront <= retAvailability.front && pax - retFront <= retAvailability.standard);
-  const chosenMember = travelers.find(p => p.isMemberTraveler);
+  const selectOutbound = useCallback((seatNumber: string, passengerIndex: number) => {
+    const seat = outMap.data?.find(item => item.seatNumber === seatNumber && item.status === "available");
+    if (seat) updateTraveler(passengerIndex, { seatNumber, outboundSeatType: seat.seatType });
+  }, [outMap.data, updateTraveler]);
+  const deselectOutbound = useCallback((seatNumber: string, passengerIndex: number) => {
+    setTravelers(list => list.map((person, index) => index === passengerIndex && person.seatNumber === seatNumber
+      ? { ...person, seatNumber: undefined, outboundSeatType: "standard" } : person));
+  }, []);
+  const selectReturn = useCallback((seatNumber: string, passengerIndex: number) => {
+    const seat = retMap.data?.find(item => item.seatNumber === seatNumber && item.status === "available");
+    if (seat) updateTraveler(passengerIndex, { returnSeatNumber: seatNumber, returnSeatType: seat.seatType });
+  }, [retMap.data, updateTraveler]);
+  const deselectReturn = useCallback((seatNumber: string, passengerIndex: number) => {
+    setTravelers(list => list.map((person, index) => index === passengerIndex && person.returnSeatNumber === seatNumber
+      ? { ...person, returnSeatNumber: undefined, returnSeatType: "standard" } : person));
+  }, []);
+
+  const outboundNumbers = useMemo(() => travelers.map(person => person.seatNumber), [travelers]);
+  const returnNumbers = useMemo(() => travelers.map(person => person.returnSeatNumber), [travelers]);
+  const namesReady = travelers.every(person => person.firstName.trim() && person.lastName.trim());
+  const seatsReady = Boolean(outMap.data && (!roundTrip || retMap.data));
+  const outwardFits = selectedLegIsAvailable(travelers, outMap.data, "outbound");
+  const returnFits = !roundTrip || selectedLegIsAvailable(travelers, retMap.data, "return");
+  const chosenMember = travelers.find(person => person.isMemberTraveler);
   const memberNameMatches = !chosenMember || sameName(chosenMember.firstName, chosenMember.lastName, user?.name);
 
-  function go(e: React.FormEvent) {
-    e.preventDefault();
-    if (!seatsReady || !outwardFits || !returnFits || !memberNameMatches) return;
+  function go(event: React.FormEvent) {
+    event.preventDefault();
+    if (!namesReady || !seatsReady || !outwardFits || !returnFits || !memberNameMatches) return;
     sessionStorage.setItem("metropro-booking", JSON.stringify({
       out: params.get("out"), ret: params.get("ret"), pax: String(pax),
       type: roundTrip ? "round_trip" : "one_way",
       contactFirstName, contactLastName, phone, email, emergencyName, emergencyPhone,
+      // Checkout forwards the stored passenger objects to quote and createCheckout unchanged.
       passengers: travelers,
     }));
     setLocation("/checkout");
@@ -103,115 +136,121 @@ export default function PassengerInfo() {
             <Link href="/account/settings" className="ml-1 font-semibold text-primary underline">Finish your profile</Link>
           </div>
         ) : null}
-          <form className="mt-7 grid min-w-0 gap-7" onSubmit={go}>
-            <section className="ticket-card grid min-w-0 gap-4 p-5 sm:grid-cols-2 sm:p-6" aria-label="Contact information">
-              <h2 className="font-serif text-xl sm:col-span-2">Contact details</h2>
-              <div className="form-field">
-                <Label htmlFor="contact-first">First name</Label>
-                <Input id="contact-first" className="h-12 bg-white" value={contactFirstName} onChange={e => setFirst(e.target.value)} required />
-              </div>
-              <div className="form-field">
-                <Label htmlFor="contact-last">Last name</Label>
-                <Input id="contact-last" className="h-12 bg-white" value={contactLastName} onChange={e => setLast(e.target.value)} required />
-              </div>
-              <div className="form-field">
-                <Label htmlFor="contact-phone">Phone</Label>
-                <Input id="contact-phone" type="tel" className="h-12 bg-white" value={phone} onChange={e => setPhone(e.target.value)} required />
-              </div>
-              <div className="form-field">
-                <Label htmlFor="contact-email">Email</Label>
-                <Input id="contact-email" type="email" className="h-12 bg-white" value={email} onChange={e => setEmail(e.target.value)} required />
-              </div>
-              {settings.data?.emergencyContactRequired ? (
-                <>
-                  <div className="form-field">
-                    <Label htmlFor="emergency-name">Emergency contact name</Label>
-                    <Input id="emergency-name" className="h-12 bg-white" value={emergencyName} onChange={e => setEmName(e.target.value)} required />
-                  </div>
-                  <div className="form-field">
-                    <Label htmlFor="emergency-phone">Emergency contact phone</Label>
-                    <Input id="emergency-phone" type="tel" className="h-12 bg-white" value={emergencyPhone} onChange={e => setEmPhone(e.target.value)} required />
-                  </div>
-                </>
-              ) : null}
-            </section>
-
-            <section className="grid gap-4" aria-label="Travelers and seats">
-              <div>
-                <h2 className="font-serif text-2xl">Choose each traveler's seat</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Outbound: {outAvailability?.standard ?? "…"} regular · {outAvailability?.front ?? "…"} front available
-                  {roundTrip ? ` · Return: ${retAvailability?.standard ?? "…"} regular · ${retAvailability?.front ?? "…"} front available` : ""}
-                </p>
-              </div>
-              {travelers.map((p, i) => (
-                <div key={i} className="ticket-card grid min-w-0 gap-4 p-5 sm:p-6">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="font-serif text-lg">Passenger {i + 1}</h3>
-                    {p.isMemberTraveler ? <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-primary">Traveling member</span> : null}
-                  </div>
-                  <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-                    <div className="form-field">
-                      <Label htmlFor={`passenger-${i}-first`}>First name</Label>
-                      <Input id={`passenger-${i}-first`} className="h-12 bg-white" value={p.firstName} onChange={e => updateTraveler(i, { firstName: e.target.value })} required />
-                    </div>
-                    <div className="form-field">
-                      <Label htmlFor={`passenger-${i}-last`}>Last name</Label>
-                      <Input id={`passenger-${i}-last`} className="h-12 bg-white" value={p.lastName} onChange={e => updateTraveler(i, { lastName: e.target.value })} required />
-                    </div>
-                    <div className="form-field">
-                      <Label htmlFor={`passenger-${i}-out-seat`}>Outbound seat</Label>
-                      <select id={`passenger-${i}-out-seat`} className="h-12 w-full min-w-0 rounded-md border border-input bg-white px-3" value={p.outboundSeatType} onChange={e => updateTraveler(i, { outboundSeatType: e.target.value as SeatType })}>
-                        <option value="standard">Regular · {money(p.isMemberTraveler ? member : standard)}</option>
-                        <option value="front" disabled={!outAvailability?.front && p.outboundSeatType !== "front"}>Front · {money(front)}</option>
-                      </select>
-                    </div>
-                    {roundTrip ? (
-                      <div className="form-field">
-                        <Label htmlFor={`passenger-${i}-return-seat`}>Return seat</Label>
-                        <select id={`passenger-${i}-return-seat`} className="h-12 w-full min-w-0 rounded-md border border-input bg-white px-3" value={p.returnSeatType ?? "standard"} onChange={e => updateTraveler(i, { returnSeatType: e.target.value as SeatType })}>
-                          <option value="standard">Regular · {money(p.isMemberTraveler ? member : standard)}</option>
-                          <option value="front" disabled={!retAvailability?.front && p.returnSeatType !== "front"}>Front · {money(front)}</option>
-                        </select>
-                      </div>
-                    ) : null}
-                  </div>
-                  {hasMembership ? (
-                    <label className="flex items-start gap-3 rounded-lg bg-secondary/70 p-3 text-sm leading-relaxed">
-                      <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-[#137a86]" checked={p.isMemberTraveler}
-                        disabled={!p.isMemberTraveler && travelers.some(t => t.isMemberTraveler)}
-                        onChange={e => updateTraveler(i, { isMemberTraveler: e.target.checked })} />
-                      <span>This passenger is me, the member. Only my regular seat is {money(member)}; my front seat remains {money(front)}.</span>
-                    </label>
-                  ) : null}
-                  {saved.data?.length ? (
-                    <div className="flex flex-wrap gap-2">
-                      {saved.data.map(s => (
-                        <button type="button" key={s.id} className="rounded-full border border-border bg-white px-3 py-1.5 text-xs hover:border-primary"
-                          onClick={() => applySaved(i, s.firstName, s.lastName)}>{s.firstName} {s.lastName}</button>
-                      ))}
-                    </div>
-                  ) : null}
+        <form className="mt-7 grid min-w-0 gap-7" onSubmit={go}>
+          <section className="ticket-card grid min-w-0 gap-4 p-5 sm:grid-cols-2 sm:p-6" aria-label="Contact information">
+            <h2 className="font-serif text-xl sm:col-span-2">Contact details</h2>
+            <div className="form-field">
+              <Label htmlFor="contact-first">First name</Label>
+              <Input id="contact-first" className="h-12 bg-white" value={contactFirstName} onChange={e => setFirst(e.target.value)} required />
+            </div>
+            <div className="form-field">
+              <Label htmlFor="contact-last">Last name</Label>
+              <Input id="contact-last" className="h-12 bg-white" value={contactLastName} onChange={e => setLast(e.target.value)} required />
+            </div>
+            <div className="form-field">
+              <Label htmlFor="contact-phone">Phone</Label>
+              <Input id="contact-phone" type="tel" className="h-12 bg-white" value={phone} onChange={e => setPhone(e.target.value)} required />
+            </div>
+            <div className="form-field">
+              <Label htmlFor="contact-email">Email</Label>
+              <Input id="contact-email" type="email" className="h-12 bg-white" value={email} onChange={e => setEmail(e.target.value)} required />
+            </div>
+            {settings.data?.emergencyContactRequired ? (
+              <>
+                <div className="form-field">
+                  <Label htmlFor="emergency-name">Emergency contact name</Label>
+                  <Input id="emergency-name" className="h-12 bg-white" value={emergencyName} onChange={e => setEmName(e.target.value)} required />
                 </div>
-              ))}
-            </section>
-            {hasMembership && !chosenMember ? (
-              <p className="rounded-xl bg-secondary p-4 text-sm">The member fare applies only when you select yourself as one of the travelers.</p>
+                <div className="form-field">
+                  <Label htmlFor="emergency-phone">Emergency contact phone</Label>
+                  <Input id="emergency-phone" type="tel" className="h-12 bg-white" value={emergencyPhone} onChange={e => setEmPhone(e.target.value)} required />
+                </div>
+              </>
             ) : null}
-            {!memberNameMatches ? (
-              <p role="alert" className="rounded-xl border border-destructive/30 bg-red-50 p-4 text-sm text-destructive">
-                The selected member passenger must match your profile name ({user?.name ?? "not set"}). <Link href="/account/settings" className="underline">Update your profile</Link> if needed.
-              </p>
-            ) : null}
-            {seatsReady && (!outwardFits || !returnFits) ? (
-              <p role="alert" className="rounded-xl border border-destructive/30 bg-red-50 p-4 text-sm text-destructive">
-                This seat selection exceeds the available regular or front seats. Choose another seat type or departure.
-              </p>
-            ) : null}
-            <Button type="submit" className="h-12 w-full text-base" disabled={!seatsReady || !outwardFits || !returnFits || !memberNameMatches}>
-              Review booking and total
-            </Button>
-          </form>
+          </section>
+
+          <section className="grid gap-4" aria-label="Passenger details">
+            <div>
+              <h2 className="font-serif text-2xl">Your travelers</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Add each traveler's name, then choose a seat for each leg of the trip.</p>
+            </div>
+            {travelers.map((person, index) => (
+              <div key={index} className="ticket-card grid min-w-0 gap-4 p-5 sm:p-6">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="font-serif text-lg">Passenger {index + 1}</h3>
+                  {person.isMemberTraveler ? <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-primary">Traveling member</span> : null}
+                </div>
+                <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+                  <div className="form-field">
+                    <Label htmlFor={`passenger-${index}-first`}>First name</Label>
+                    <Input id={`passenger-${index}-first`} className="h-12 bg-white" value={person.firstName} onChange={e => updateTraveler(index, { firstName: e.target.value })} required />
+                  </div>
+                  <div className="form-field">
+                    <Label htmlFor={`passenger-${index}-last`}>Last name</Label>
+                    <Input id={`passenger-${index}-last`} className="h-12 bg-white" value={person.lastName} onChange={e => updateTraveler(index, { lastName: e.target.value })} required />
+                  </div>
+                </div>
+                {person.seatNumber || person.returnSeatNumber ? (
+                  <p className="text-sm text-muted-foreground">Outbound: {person.seatNumber ?? "not selected"}{roundTrip ? ` · Return: ${person.returnSeatNumber ?? "not selected"}` : ""}</p>
+                ) : null}
+                {hasMembership ? (
+                  <label className="flex items-start gap-3 rounded-lg bg-secondary/70 p-3 text-sm leading-relaxed">
+                    <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-[#137a86]" checked={person.isMemberTraveler}
+                      disabled={!person.isMemberTraveler && travelers.some(traveler => traveler.isMemberTraveler)}
+                      onChange={e => updateTraveler(index, { isMemberTraveler: e.target.checked })} />
+                    <span>This passenger is me, the member. Only my regular seat is {money(member)}; my front seat remains {money(front)}.</span>
+                  </label>
+                ) : null}
+                {saved.data?.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {saved.data.map(passenger => (
+                      <button type="button" key={passenger.id} className="rounded-full border border-border bg-white px-3 py-1.5 text-xs hover:border-primary"
+                        onClick={() => applySaved(index, passenger.firstName, passenger.lastName)}>{passenger.firstName} {passenger.lastName}</button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </section>
+          {namesReady ? (
+            <div className="grid min-w-0 gap-6" aria-label="Select seats">
+              <div>
+                <h2 className="font-serif text-2xl">Choose your seats</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Select seats in passenger order. Each leg has its own seat choices; no seat is reserved until checkout.</p>
+              </div>
+              <div aria-label="Outbound seating">
+                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-primary">Outbound departure</h3>
+                <SeatMap departureId={outId} passengerCount={pax} selectedSeats={outboundNumbers}
+                  onSeatSelect={selectOutbound} onSeatDeselect={deselectOutbound} />
+              </div>
+              {roundTrip ? (
+                <div aria-label="Return seating">
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-primary">Return departure</h3>
+                  <SeatMap departureId={retId} passengerCount={pax} selectedSeats={returnNumbers}
+                    onSeatSelect={selectReturn} onSeatDeselect={deselectReturn} />
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <p className="rounded-xl bg-muted p-4 text-sm text-muted-foreground">Enter each passenger's first and last name to open the seat map.</p>
+          )}
+          {hasMembership && !chosenMember ? (
+            <p className="rounded-xl bg-secondary p-4 text-sm">The member fare applies only when you select yourself as one of the travelers.</p>
+          ) : null}
+          {!memberNameMatches ? (
+            <p role="alert" className="rounded-xl border border-destructive/30 bg-red-50 p-4 text-sm text-destructive">
+              The selected member passenger must match your profile name ({user?.name ?? "not set"}). <Link href="/account/settings" className="underline">Update your profile</Link> if needed.
+            </p>
+          ) : null}
+          {namesReady && seatsReady && (!outwardFits || !returnFits) ? (
+            <p role="status" className="rounded-xl border border-primary/20 bg-secondary p-4 text-sm">
+              Select one available seat per passenger{roundTrip ? " on both departures" : ""}. If a seat was just taken or held, choose another.
+            </p>
+          ) : null}
+          <Button type="submit" className="h-12 w-full text-base" disabled={!namesReady || !seatsReady || !outwardFits || !returnFits || !memberNameMatches}>
+            Review booking and total
+          </Button>
+        </form>
       </div>
     </PageShell>
   );

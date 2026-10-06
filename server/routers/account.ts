@@ -27,6 +27,7 @@ import { getMemberProfileStatus, saveMemberIdPhoto } from "../services/member-pr
 import { normalizeMemberEmail } from "../services/member-auth";
 import { TEMPLATES, notify } from "../services/notifications";
 import { canSelfServeChange, getSettings } from "../services/policies";
+import { seatNumberForTicket } from "../services/ticket-seat";
 import { getStripe, stripeEnabled } from "../stripe/client";
 import { membershipPriceData } from "../stripe/products";
 import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
@@ -146,6 +147,7 @@ export const accountRouter = router({
           fareType: booking.fareType,
         },
         passenger,
+        seatNumber: seatNumberForTicket(ticket, passenger),
         trip,
       };
     }),

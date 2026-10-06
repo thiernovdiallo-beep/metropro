@@ -37,6 +37,7 @@ const selectionInput = z.object({
 });
 
 type DepartureDetails = NonNullable<Awaited<ReturnType<typeof loadPricedDeparture>>>;
+type NumberedSelection = SeatSelection & { seatNumber?: string; returnSeatNumber?: string };
 
 function checkedSelections(
   selections: SeatSelection[], count: number, hasReturn: boolean, activeMembership: boolean, name: string | null
@@ -55,20 +56,38 @@ function requireReversedRoute(outbound: DepartureDetails, ret: DepartureDetails 
   }
 }
 
-function lineItemsForLeg(departure: DepartureDetails, selections: SeatSelection[], leg: "outbound" | "return") {
-  const rows = new Map<string, { unit: number; description: string; count: number }>();
-  for (const p of selections) {
+export function lineItemsForLeg(departure: DepartureDetails, selections: NumberedSelection[], leg: "outbound" | "return") {
+  const rows = new Map<string, { unit: number; description: string; count: number; numberedSeats: [number, string][] }>();
+  for (const [index, p] of selections.entries()) {
     const seat = leg === "outbound" ? p.outboundSeatType : p.returnSeatType;
     if (!seat) continue;
     const unit = seatFareCents(departure.route, seat, p.isMemberTraveler);
     const label = seat === "front" ? "Front passenger seat" : p.isMemberTraveler ? "Member regular seat" : "Regular seat";
     const description = `${departure.origin.name} → ${departure.destination.name} · ${label}`;
     const key = `${unit}:${description}`;
+    const seatNumber = leg === "outbound" ? p.seatNumber : p.returnSeatNumber;
     const found = rows.get(key);
-    if (found) found.count += 1;
-    else rows.set(key, { unit, description, count: 1 });
+    if (found) {
+      found.count += 1;
+      if (seatNumber) found.numberedSeats.push([index + 1, seatNumber]);
+    } else rows.set(key, { unit, description, count: 1, numberedSeats: seatNumber ? [[index + 1, seatNumber]] : [] });
   }
-  return [...rows.values()].map(row => ticketLineItem(row.unit, row.count, row.description));
+  return [...rows.values()].map(row => {
+    const item = ticketLineItem(row.unit, row.count, row.description);
+    if (!row.numberedSeats.length) return item;
+    // Keep one Stripe line item per price + fare description; seat numbers are annotations, not prices.
+    return {
+      ...item,
+      price_data: {
+        ...item.price_data,
+        product_data: {
+          ...item.price_data.product_data,
+          description: `${row.description} · Selected seats: ${row.numberedSeats.map(([, number]) => number).join(", ")}`,
+          metadata: { leg, departure_id: String(departure.id), passenger_seats: JSON.stringify(row.numberedSeats) },
+        },
+      },
+    };
+  });
 }
 
 export const bookingRouter = router({
@@ -201,6 +220,11 @@ export const bookingRouter = router({
       const checkoutMinutes = Math.min(1430, Math.max(30, settings.holdMinutes));
       const checkoutExpiresAt = Math.floor(Date.now() / 1000) + checkoutMinutes * 60 + 120;
       const hasSeatNumbers = input.passengers.some(p => p.seatNumber || p.returnSeatNumber);
+      const passengerSeatMetadata: Record<string, string> = {};
+      input.passengers.forEach((p, index) => {
+        if (p.seatNumber) passengerSeatMetadata[`passenger_${index + 1}_outbound_seat`] = p.seatNumber;
+        if (p.returnSeatNumber) passengerSeatMetadata[`passenger_${index + 1}_return_seat`] = p.returnSeatNumber;
+      });
       let bookingId: number | null = null;
       try {
         bookingId = await db.transaction(async tx => {
@@ -267,12 +291,14 @@ export const bookingRouter = router({
             ...lineItemsForLeg(outbound, input.passengers, "outbound"),
             ...(ret ? lineItemsForLeg(ret, input.passengers, "return") : []),
           ],
-          payment_intent_data: { metadata: { ...(ctx.user ? { user_id: String(ctx.user.id) } : {}), booking_id: String(bookingId) } },
+          payment_intent_data: { metadata: { ...(ctx.user ? { user_id: String(ctx.user.id) } : {}), booking_id: String(bookingId), ...passengerSeatMetadata } },
           metadata: {
             ...(ctx.user ? { user_id: String(ctx.user.id) } : {}),
             customer_email: input.contactEmail,
             customer_name: `${input.contactFirstName} ${input.contactLastName}`,
             booking_id: String(bookingId),
+            // The webhook uses booking_id to load authoritative passenger/seat assignments from MySQL.
+            ...passengerSeatMetadata,
           },
         });
         await db.update(bookings).set({ stripeCheckoutSessionId: session.id }).where(eq(bookings.id, bookingId));
