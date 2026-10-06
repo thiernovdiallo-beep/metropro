@@ -60,10 +60,17 @@ describe("standalone SeatMap", () => {
     }));
     const html = render(["3M", null]);
     expect(html).toContain("11 passenger seats + driver");
+    expect(html).toContain("metro-chair-icon");
+    expect(html).toContain("metro-van-door");
+    expect(html).toContain("Door");
+    expect(html).toContain("Regular");
+    expect(html).toContain("Booked");
+    expect(html).not.toContain("Business");
     expect(html).toContain('aria-label="Driver seat, not bookable"');
     expect(html).toContain('aria-label="Middle seat 3M, selected, $150, passenger 1"');
     expect(html).toContain('aria-label="Middle row with center seat"');
     expect(html).toMatch(/aria-label="Middle seat 3M, selected, \$150, passenger 1"[^>]*metro-seat--selected/);
+    expect(html).toMatch(/data-state="selected" data-seat-type="standard"/);
     expect(html.match(/aria-pressed=/g)).toHaveLength(11);
     expect(html).not.toContain('aria-label="Seat 3M, blocked"');
   });

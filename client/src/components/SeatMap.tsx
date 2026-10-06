@@ -35,6 +35,27 @@ const legend: { label: string; status: SeatStatus }[] = [
   { label: "Blocked", status: "blocked" },
 ];
 
+// The reference uses colored chair silhouettes rather than large fare cards. Its
+// "business" category is not offered by Metro Pro, so the live legend stays truthful.
+const diagramLegend = [
+  { label: "Front", swatch: "bg-amber-500" },
+  { label: "Regular", swatch: "bg-primary" },
+  { label: "Booked", swatch: "bg-gray-400" },
+  { label: "Held", swatch: "bg-yellow-400" },
+  { label: "Selected", swatch: "bg-blue-700 ring-2 ring-blue-200" },
+];
+
+function ChairGlyph() {
+  return (
+    <svg viewBox="0 0 56 56" aria-hidden="true" className="metro-chair-icon">
+      <rect x="14" y="11" width="28" height="30" rx="4" fill="currentColor" opacity=".72" />
+      <path d="M10 26h4v16h28V26h4v19a3 3 0 0 1-3 3H13a3 3 0 0 1-3-3V26Z" fill="currentColor" />
+      <path d="M15 37h26" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path d="M17 48v3m22-3v3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function remainingHoldTime(expiresAt: Date | string | number | null | undefined, now: number) {
   if (expiresAt == null) return null;
   const end = new Date(expiresAt).getTime();
@@ -129,7 +150,7 @@ export default function SeatMap({
     setTooltipSeat(null);
   }
 
-  function renderSeat(seat: SeatPosition) {
+  function renderSeat(seat: SeatPosition, graphic = false) {
     const info = seatMap.isError ? undefined : seatsByNumber.get(seat.seatNumber);
     const assignedIndex = selectedByNumber.get(seat.seatNumber);
     const state: SeatStatus = !info ? "blocked" : assignedIndex !== undefined && info.status === "available" ? "selected" : info.status;
@@ -144,11 +165,24 @@ export default function SeatMap({
         aria-disabled={state === "blocked" || state === "taken" || state === "held"}
         aria-describedby={tooltipSeat === seat.seatNumber ? `seat-tooltip-${departureId}` : undefined}
         title={state === "taken" ? "This seat is taken" : state === "held" ? "This seat is held by another traveler" : undefined}
+        data-state={graphic ? state : undefined}
+        data-seat-type={graphic ? seat.seatType : undefined}
         onClick={() => selectSeat(seat)}
-        className={`flex min-h-18 w-full flex-col items-center justify-center rounded-xl border-2 px-1.5 py-2 text-center shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${seatColors[state]}`}
+        className={graphic
+          ? `metro-diagram-seat metro-seat--${state} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`
+          : `flex min-h-18 w-full flex-col items-center justify-center rounded-xl border-2 px-1.5 py-2 text-center shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${seatColors[state]}`}
       >
-        <span className="text-sm font-bold leading-tight">{seat.label}</span>
-        <span className="mt-1 text-xs font-medium leading-tight">{info ? money(info.priceCents) : "—"}</span>
+        {graphic ? (
+          <>
+            <span className="metro-diagram-seat-icon"><ChairGlyph /><span className="metro-diagram-seat-number">{seat.label}</span></span>
+            <span className="metro-diagram-seat-price">{info ? money(info.priceCents) : "—"}</span>
+          </>
+        ) : (
+          <>
+            <span className="text-sm font-bold leading-tight">{seat.label}</span>
+            <span className="mt-1 text-xs font-medium leading-tight">{info ? money(info.priceCents) : "—"}</span>
+          </>
+        )}
       </button>
     );
   }
@@ -164,19 +198,27 @@ export default function SeatMap({
           {timeLeft === null ? "Seats are not held until checkout" : timeLeft === "00:00" ? "Seat hold expired — refresh availability" : `Seats held for ${timeLeft}`}
         </p>
       </div>
-      <div className="mt-4 flex flex-wrap gap-x-3 gap-y-2" aria-label="Seat status legend">
-        {legend.map(({ label, status }) => (
-          <span key={status} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span aria-hidden="true" className={`size-3.5 rounded border ${seatColors[status]}`} />
-            {label}
-          </span>
-        ))}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2" aria-label="Seat status legend">
+        <div className="flex flex-wrap gap-x-3 gap-y-2">
+          {elevenPassengerVan ? diagramLegend.map(({ label, swatch }) => (
+            <span key={label} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span aria-hidden="true" className={`size-3 rounded-sm ${swatch}`} />{label}
+            </span>
+          )) : legend.map(({ label, status }) => (
+            <span key={status} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span aria-hidden="true" className={`size-3.5 rounded border ${seatColors[status]}`} />{label}
+            </span>
+          ))}
+        </div>
+        {elevenPassengerVan && seats ? <strong className="text-xs font-semibold text-foreground">{seats.filter(seat => seat.status === "available").length} available</strong> : null}
       </div>
 
       {seatMap.isLoading ? <div role="status" className="mx-auto mt-5 flex min-h-56 w-full max-w-[320px] items-center justify-center rounded-[2rem] border-2 border-border bg-background px-4 text-center text-sm text-muted-foreground">Loading live seats…</div>
         : !seatMap.isError && seats?.length === 0 ? <div role="status" className="metro-notice mx-auto mt-5 max-w-[320px] text-center">No seats are available for this departure. Please choose another trip or refresh availability.</div>
-        : <div className={`mx-auto mt-5 w-full rounded-[2rem] border-2 border-border bg-background px-3 py-5 shadow-inner sm:px-5 ${elevenPassengerVan ? "max-w-[350px]" : "max-w-[320px]"}`}>
-        <div className="mb-5 flex flex-col items-center gap-1 text-muted-foreground">
+        : <div className={elevenPassengerVan
+          ? "mx-auto mt-4 w-full max-w-[390px] bg-white px-6 py-4 sm:px-8"
+          : "mx-auto mt-5 w-full max-w-[320px] rounded-[2rem] border-2 border-border bg-background px-3 py-5 shadow-inner sm:px-5"}>
+        <div className={elevenPassengerVan ? "mb-4 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground" : "mb-5 flex flex-col items-center gap-1 text-muted-foreground"}>
           {elevenPassengerVan ? <span className="text-[11px] font-semibold uppercase tracking-[0.14em]">Front of van · 11 passenger seats + driver</span> : (
           <>
           <svg aria-hidden="true" viewBox="0 0 40 40" className="size-8 fill-none stroke-current stroke-2">
@@ -188,26 +230,26 @@ export default function SeatMap({
           </>
           )}
         </div>
-        <div className="space-y-3" role="group" aria-label="Van seats, front to back">
+        <div className={elevenPassengerVan ? "space-y-5" : "space-y-3"} role="group" aria-label="Van seats, front to back">
           {rows.map(row => {
             if (elevenPassengerVan) return (
               <div key={row} role="group" aria-label={row === 1 ? "Front passenger row and driver" : row === 3 ? "Middle row with center seat" : `Row ${row}`}
-                className={row === 1 ? "rounded-2xl border border-border bg-white p-2" : ""}>
-                {row === 1 ? <p className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Front row</p> : null}
-                <div className="grid grid-cols-3 items-center gap-2">
+                className={row === 1 ? "mb-8" : "relative"}>
+                {row === 2 ? <span aria-hidden="true" className="metro-van-door"><span>Door</span></span> : null}
+                <div className="grid grid-cols-3 items-center justify-items-center gap-2">
                   {([0, 1, 2] as const).map(column => {
                     const seat = layout.find(position => position.row === row && position.column === column);
-                    if (seat) return renderSeat(seat);
+                    if (seat) return renderSeat(seat, true);
                     if (row === 1 && column === 2) return (
-                      <div key="driver" role="img" aria-label="Driver seat, not bookable" className="flex min-h-18 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted text-muted-foreground">
-                        <svg aria-hidden="true" viewBox="0 0 40 40" className="size-7 fill-none stroke-current stroke-2">
+                      <div key="driver" role="img" aria-label="Driver seat, not bookable" className="flex min-h-16 flex-col items-center justify-center text-foreground">
+                        <svg aria-hidden="true" viewBox="0 0 40 40" className="size-10 fill-none stroke-current stroke-2">
                           <circle cx="20" cy="20" r="14" /><circle cx="20" cy="20" r="3" />
                           <path d="M20 6v11M8 26l9-5M32 26l-9-5" />
                         </svg>
-                        <span className="mt-1 text-[10px] font-semibold">Driver</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground">Driver</span>
                       </div>
                     );
-                    return column === 1 ? <span key={`aisle-${row}`} aria-hidden="true" className="text-center text-[10px] font-medium text-muted-foreground">aisle</span> : <span key={`empty-${row}-${column}`} aria-hidden="true" />;
+                    return <span key={`aisle-${row}-${column}`} aria-hidden="true" />;
                   })}
                 </div>
               </div>

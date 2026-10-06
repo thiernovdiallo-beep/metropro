@@ -204,6 +204,64 @@
   .metro-seat--held { border-color: var(--metro-warning); background: var(--metro-warning-bg); color: #92400E; }
   .metro-seat--taken { border-color: var(--metro-error); background: var(--metro-error-bg); color: #B91C1C; }
   .metro-seat--blocked { border-color: var(--metro-line); background: var(--muted); color: var(--metro-muted); }
+  /* Open three-across van plan: retain real seat status/price in each accessible button. */
+  .metro-diagram-seat[class*="metro-seat--"] {
+    display: flex;
+    width: 100%;
+    max-width: 82px;
+    min-height: 74px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 0.35rem;
+    background: transparent;
+    box-shadow: none;
+    color: var(--metro-ink);
+    text-align: center;
+    transition: transform 150ms ease;
+  }
+  .metro-diagram-seat:hover { transform: translateY(-2px); }
+  .metro-diagram-seat-icon { position: relative; display: block; width: 54px; height: 52px; color: var(--primary); }
+  .metro-chair-icon { display: block; width: 100%; height: 100%; }
+  .metro-diagram-seat-number {
+    position: absolute;
+    top: 11px;
+    left: 50%;
+    min-width: 24px;
+    transform: translateX(-50%);
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    background: white;
+    padding: 0 2px;
+    color: var(--metro-ink);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 17px;
+  }
+  .metro-diagram-seat-price { color: var(--metro-muted); font-size: 10px; font-weight: 600; line-height: 1.1; white-space: nowrap; }
+  .metro-diagram-seat[data-seat-type="front"][data-state="available"] .metro-diagram-seat-icon { color: #F59E0B; }
+  .metro-diagram-seat[data-state="taken"] .metro-diagram-seat-icon { color: #9CA3AF; }
+  .metro-diagram-seat[data-state="held"] .metro-diagram-seat-icon { color: #FACC15; }
+  .metro-diagram-seat[data-state="selected"] .metro-diagram-seat-icon { color: #1559C7; filter: drop-shadow(0 0 4px #93C5FD); }
+  .metro-diagram-seat[data-state="selected"] .metro-diagram-seat-number { border-color: white; background: #1559C7; color: white; }
+  .metro-diagram-seat[data-state="blocked"] .metro-diagram-seat-icon { color: #CBD5E1; }
+  .metro-van-door {
+    position: absolute;
+    top: 8px;
+    left: -23px;
+    display: flex;
+    width: 18px;
+    height: 116px;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed var(--metro-line);
+    color: var(--metro-muted);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    writing-mode: vertical-rl;
+  }
   .fare-price { color: var(--primary); font-variant-numeric: tabular-nums; }
   .stamp-soldout {
     letter-spacing: 0.14em;
