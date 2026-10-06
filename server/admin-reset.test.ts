@@ -67,6 +67,13 @@ function resetFixture(tokenHash: string, enrolled = true) {
       }
       return [{ affectedRows: 1 }];
     } }; } }),
+    insert: (table: unknown) => ({ async values(values: Record<string, unknown>) {
+      if (table !== memberCredentials || fixture.credential) throw new Error("Unexpected credential insertion");
+      fixture.credential = { id: 56, userId: values.userId as number,
+        emailNormalized: values.emailNormalized as string, passwordHash: values.passwordHash as string,
+        sessionVersion: 0, failedAttempts: 0, lockedUntil: null };
+      return [{ insertId: 56 }];
+    } }),
     transaction: async <T>(callback: (tx: unknown) => Promise<T>): Promise<T> => callback(db),
   };
   mock.db = db;
@@ -143,14 +150,35 @@ describe("owner-only administrator password reset", () => {
     expect(fixture.credential?.sessionVersion).toBe(4);
   });
 
-  it("refuses a reset if another admin exists before the invitation is consumed", async () => {
+  it("resets only the invited administrator even when another administrator exists", async () => {
     const { token, hash } = createAdminResetToken();
     const fixture = resetFixture(hash);
     fixture.extraAdmin = true;
     const password = "UniqueSyntheticPassphrase123!";
     await expect(caller().completeSetup({ token, password, confirmPassword: password }))
+      .resolves.toEqual({ success: true });
+    expect(fixture.credential?.sessionVersion).toBe(4);
+    expect(fixture.invite.consumedAt).toBeInstanceOf(Date);
+  });
+
+  it("allows first-time setup for the invited admin when an unrelated admin already exists", async () => {
+    const { token, hash } = createAdminSetupToken();
+    const fixture = resetFixture(hash, false);
+    fixture.extraAdmin = true;
+    const password = "NewInvitedAdminPassphrase123!";
+    await expect(caller().completeSetup({ token, password, confirmPassword: password }))
+      .resolves.toEqual({ success: true });
+    expect(fixture.credential?.emailNormalized).toBe(fixture.admin.email);
+    expect(fixture.invite.consumedAt).toBeInstanceOf(Date);
+  });
+
+  it("rejects a setup link when its targeted user is no longer an administrator", async () => {
+    const { token, hash } = createAdminSetupToken();
+    const fixture = resetFixture(hash, false);
+    fixture.admin.role = "customer";
+    const password = "NewInvitedAdminPassphrase123!";
+    await expect(caller().completeSetup({ token, password, confirmPassword: password }))
       .rejects.toMatchObject({ code: "BAD_REQUEST" });
-    expect(fixture.credential?.sessionVersion).toBe(3);
     expect(fixture.invite.consumedAt).toBeNull();
   });
 });

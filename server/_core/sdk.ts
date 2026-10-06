@@ -7,6 +7,7 @@ import type { Request } from "express";
 import { SignJWT, jwtVerify } from "jose";
 import { memberCredentials, type User } from "../../drizzle/schema";
 import * as db from "../db";
+import { adminSessionAfterGrant } from "../services/admin-auth";
 import { ENV } from "./env";
 import type {
   ExchangeTokenRequest,
@@ -24,6 +25,7 @@ export type SessionPayload = {
   appId: string;
   name: string;
   memberSessionVersion?: number;
+  issuedAtMs?: number;
 };
 
 const EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
@@ -194,9 +196,11 @@ class SDKServer {
       openId: payload.openId,
       appId: payload.appId,
       name: payload.name,
+      authAtMs: issuedAt,
       ...(payload.memberSessionVersion === undefined ? {} : { memberSessionVersion: payload.memberSessionVersion }),
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+      .setIssuedAt()
       .setExpirationTime(expirationSeconds)
       .sign(secretKey);
   }
@@ -214,7 +218,7 @@ class SDKServer {
       const { payload } = await jwtVerify(cookieValue, secretKey, {
         algorithms: ["HS256"],
       });
-      const { openId, appId, name, memberSessionVersion } = payload as Record<string, unknown>;
+      const { openId, appId, name, memberSessionVersion, authAtMs } = payload as Record<string, unknown>;
 
       if (
         !isNonEmptyString(openId) ||
@@ -231,6 +235,8 @@ class SDKServer {
         name,
         memberSessionVersion: typeof memberSessionVersion === "number" && Number.isSafeInteger(memberSessionVersion)
           ? memberSessionVersion : undefined,
+        issuedAtMs: typeof authAtMs === "number" && Number.isSafeInteger(authAtMs)
+          ? authAtMs : undefined,
       };
     } catch (error) {
       console.warn("[Auth] Session verification failed", String(error));
@@ -323,6 +329,10 @@ class SDKServer {
 
     if (!user) {
       throw ForbiddenError("User not found");
+    }
+
+    if (user.role === "admin" && !adminSessionAfterGrant(user.adminEnabledAt, session.issuedAtMs)) {
+      throw ForbiddenError("Sign in again to access administrator tools");
     }
 
     if (session.openId.startsWith("local_") || session.memberSessionVersion !== undefined) {

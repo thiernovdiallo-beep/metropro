@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `adminEnabledAt` datetime(3);

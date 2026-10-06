@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ADMIN_SESSION_MS, ADMIN_SETUP_MS, adminResetTokenHash, adminSetupTokenHash, createAdminResetToken, createAdminSetupToken } from "./services/admin-auth";
+import { ADMIN_SESSION_MS, ADMIN_SETUP_MS, adminResetTokenHash, adminSessionAfterGrant, adminSetupTokenHash, createAdminResetToken, createAdminSetupToken } from "./services/admin-auth";
 import { sdk } from "./_core/sdk";
 
 describe("existing-admin password enrollment", () => {
@@ -34,5 +34,15 @@ describe("existing-admin password enrollment", () => {
     const session = await sdk.verifySession(token);
     expect(session?.openId).toBe("apple_admin_test");
     expect(session?.memberSessionVersion).toBe(12);
+    expect(session?.issuedAtMs).toBeTypeOf("number");
+  });
+
+  it("does not elevate an older Google customer session when its account gains administrator access", () => {
+    const grantAt = new Date("2026-10-06T15:00:00.123Z");
+    expect(adminSessionAfterGrant(grantAt, grantAt.getTime() - 1)).toBe(false);
+    expect(adminSessionAfterGrant(grantAt, undefined)).toBe(false);
+    expect(adminSessionAfterGrant(grantAt, grantAt.getTime())).toBe(false);
+    expect(adminSessionAfterGrant(grantAt, grantAt.getTime() + 1)).toBe(true);
+    expect(adminSessionAfterGrant(null, undefined)).toBe(true);
   });
 });

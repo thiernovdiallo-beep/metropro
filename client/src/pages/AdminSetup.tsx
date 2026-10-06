@@ -46,7 +46,7 @@ export default function AdminSetup() {
     <PageShell>
       <section className="metro-page metro-page--readable flex min-h-[60vh] items-center">
         <div className="mx-auto w-full max-w-lg">
-          <PageIntro eyebrow="Private staff access" title="Set a new admin password" description="This owner-only link sets or resets the password for the existing administrator. Previous password-based sessions end when you save the new password; Apple sign-in remains unchanged." />
+          <PageIntro eyebrow="Private staff access" title="Set a new admin password" description="This one-time private link sets or resets a password for the invited administrator. A reset ends that administrator's previous password sessions; other administrators and Google/Apple sign-in are unchanged." />
           <div className="ticket-card p-5 sm:p-7">
           {!token ? (
             <StatusNotice tone="error">

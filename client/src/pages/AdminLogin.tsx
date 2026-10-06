@@ -50,6 +50,12 @@ export default function AdminLogin() {
     setOauthWorking(true);
     try {
       if (user && user.role !== "admin") await logout();
+      // An old password bearer takes priority over a fresh OAuth cookie. Clear
+      // it even when auth.me is null after a customer's role was upgraded.
+      sessionStorage.removeItem("metropro-admin-session");
+      sessionStorage.removeItem("metropro-driver-session");
+      sessionStorage.removeItem("metropro-member-session");
+      sessionStorage.removeItem("manus-cookie");
       sessionStorage.removeItem("metropro-member-onboarding");
       sessionStorage.setItem(ADMIN_LOGIN_INTENT_KEY, "1");
       startLogin();
@@ -64,7 +70,7 @@ export default function AdminLogin() {
     <PageShell>
       <section className="metro-page metro-page--readable flex min-h-[60vh] items-center">
         <div className="mx-auto w-full max-w-lg">
-          <PageIntro eyebrow="Staff access" title="Admin sign in" description="Sign in to the existing authorized administrator account. This form cannot create or grant administrator access." />
+          <PageIntro eyebrow="Staff access" title="Admin sign in" description="Sign in to an authorized administrator account. This form cannot create or grant administrator access." />
           <div className="ticket-card p-5 sm:p-7">
           {user && user.role !== "admin" ? (
             <StatusNotice>

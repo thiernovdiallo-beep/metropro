@@ -3,6 +3,14 @@ import { createHash, randomBytes } from "node:crypto";
 export const ADMIN_SESSION_MS = 8 * 60 * 60 * 1000;
 export const ADMIN_SETUP_MS = 24 * 60 * 60 * 1000;
 
+// Existing admins have no activation timestamp. A newly promoted account must
+// authenticate again: pre-promotion customer sessions must not gain admin rights.
+export function adminSessionAfterGrant(adminEnabledAt: Date | null, issuedAtMs?: number): boolean {
+  if (!adminEnabledAt) return true;
+  return typeof issuedAtMs === "number" && Number.isSafeInteger(issuedAtMs) &&
+    issuedAtMs > adminEnabledAt.getTime();
+}
+
 // 32 random bytes encode to 43 unpadded URL-safe characters. A malformed
 // token is never used in a database lookup.
 const SETUP_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;

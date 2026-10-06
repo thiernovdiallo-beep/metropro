@@ -21,6 +21,7 @@ export const users = mysqlTable("users", {
   phone: varchar("phone", { length: 32 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["customer", "driver", "admin"]).default("customer").notNull(),
+  adminEnabledAt: datetime("adminEnabledAt", { mode: "date", fsp: 3 }),
   stripeCustomerId: varchar("stripeCustomerId", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

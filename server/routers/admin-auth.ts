@@ -57,12 +57,9 @@ export const adminAuthRouter = router({
         }
         const [admin] = await tx.select().from(users)
           .where(eq(users.id, invite.userId)).limit(1).for("update");
-        const activeAdmins = await tx.select({ id: users.id }).from(users)
-          .where(eq(users.role, "admin")).for("update");
         const [existing] = await tx.select({ id: memberCredentials.id, emailNormalized: memberCredentials.emailNormalized }).from(memberCredentials)
           .where(eq(memberCredentials.userId, invite.userId)).limit(1).for("update");
-        if (!admin || admin.role !== "admin" || !admin.email || activeAdmins.length !== 1 ||
-            activeAdmins[0].id !== admin.id || Boolean(existing) !== isReset ||
+        if (!admin || admin.role !== "admin" || !admin.email || Boolean(existing) !== isReset ||
             (existing && existing.emailNormalized !== normalizeMemberEmail(admin.email))) {
           throw new TRPCError({ code: "BAD_REQUEST", message: INVALID_INVITE });
         }
