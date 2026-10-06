@@ -27,6 +27,18 @@ describe("Metro Pro homepage marketing sections", () => {
     expect(html).not.toContain("Pittsburgh");
   });
 
+  it("distinguishes routes that are loading, unavailable, and genuinely empty", () => {
+    const props = { routes: [], date: "2026-12-09" };
+    const loading = render(createElement(PopularRoutes, { ...props, loading: true }));
+    expect(loading).toContain("Loading Metro Pro");
+    expect(loading).not.toContain("No routes to show");
+    const error = render(createElement(PopularRoutes, { ...props, error: true }));
+    expect(error).toContain("Routes could not be loaded");
+    expect(error).not.toContain("No routes to show");
+    const empty = render(createElement(PopularRoutes, props));
+    expect(empty).toContain("Current routes will appear here when schedules are available.");
+  });
+
   it("keeps FAQs and support links inside real application sections", () => {
     const html = render(createElement(TravelInformation));
     expect(html).toContain('id="frequently-asked-questions"');

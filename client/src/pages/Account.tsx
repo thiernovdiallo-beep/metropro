@@ -1,4 +1,5 @@
 import { PageShell } from "@/components/Brand";
+import { ActionLink, PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,23 +33,31 @@ export default function Account() {
   if (!isAuthenticated) {
     return (
       <PageShell>
-        <div className="container py-16">
-          <h1 className="font-serif text-3xl">Your trips</h1>
-          <a href="/#member-sign-in"><Button className="mt-4">Member sign in</Button></a>
-          <a href="/#trip-search" className="ml-2 mt-4 inline-flex min-h-10 items-center rounded-lg border border-primary/40 px-4 text-sm font-semibold text-primary">Book without an account</a>
+        <div className="metro-page metro-page--readable">
+          <PageIntro eyebrow="Metro Pro account" title="Your trips" description="Sign in to view your bookings, tickets and member profile." />
+          <div className="ticket-card p-5 sm:p-7">
+            <div className="flex flex-wrap gap-3">
+              <ActionLink href="/#member-sign-in" variant="primary">Member sign in</ActionLink>
+              <ActionLink href="/#trip-search">Book without an account</ActionLink>
+            </div>
+          </div>
         </div>
       </PageShell>
     );
   }
   return (
     <PageShell>
-      <div className="container grid min-w-0 gap-8 py-10 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <aside className="grid min-w-0 grid-cols-2 gap-2 self-start sm:grid-cols-3 lg:flex lg:flex-col">
-          {NAV.map(([href, label]) => (
-            <Link key={href} href={href} className="inline-flex min-h-11 items-center rounded-md px-3 py-2 text-sm hover:bg-secondary">
-              {label}
-            </Link>
-          ))}
+      <div className="metro-page metro-page--wide grid min-w-0 gap-7 lg:grid-cols-[235px_minmax(0,1fr)] lg:gap-10">
+        <aside className="ticket-card min-w-0 self-start p-2">
+          <p className="px-3 pt-2 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Account navigation</p>
+          <nav className="metro-nav-scroll mt-1 lg:flex-col lg:overflow-visible" aria-label="Account navigation">
+            {NAV.map(([href, label]) => {
+              const active = href === "/account" ? !section : href === `/account/${section}`;
+              return <Link key={href} href={href} aria-current={active ? "page" : undefined} className="lg:w-full">
+                {label}
+              </Link>;
+            })}
+          </nav>
         </aside>
         <section className="min-w-0">
           {section === "past" ? <Past /> : null}
@@ -72,12 +81,11 @@ function Upcoming({ name }: { name?: string | null }) {
   const trips = [...(q.data?.upcoming ?? [])].sort((a, b) => (a.outbound?.departAt?.getTime() ?? 0) - (b.outbound?.departAt?.getTime() ?? 0));
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Your Metro Pro account</p>
-      <h1 className="mt-2 font-serif text-3xl">Welcome{name ? `, ${name.split(" ")[0]}` : ""}</h1>
-      <div className="mt-5 grid gap-3 sm:grid-cols-3"><div className="ticket-card p-4"><p className="text-xs text-muted-foreground">Upcoming trips</p><p className="font-serif text-2xl">{q.data?.upcoming.length ?? "—"}</p></div><div className="ticket-card p-4"><p className="text-xs text-muted-foreground">Previous bookings</p><p className="font-serif text-2xl">{q.data?.previous.length ?? "—"}</p></div><div className="ticket-card p-4"><p className="text-xs text-muted-foreground">Membership</p><p className="mt-2 font-semibold capitalize">{q.data?.membership?.status ?? "Not subscribed"}</p></div></div>
+      <PageIntro eyebrow="Your Metro Pro account" title={`Welcome${name ? `, ${name.split(" ")[0]}` : ""}`} description="Manage your upcoming travel, digital tickets and Metro Pro membership." />
+      <div className="grid gap-3 sm:grid-cols-3"><div className="ticket-card p-4"><p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Upcoming trips</p><p className="mt-2 font-serif text-2xl">{q.data?.upcoming.length ?? "—"}</p></div><div className="ticket-card p-4"><p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Previous bookings</p><p className="mt-2 font-serif text-2xl">{q.data?.previous.length ?? "—"}</p></div><div className="ticket-card p-4"><p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Membership</p><StatusBadge className="mt-2" status={q.data?.membership?.status ?? "inactive"} label={q.data?.membership?.status ?? "Not subscribed"} /></div></div>
       <h2 className="mt-8 font-serif text-2xl">Upcoming trips</h2>
-      {q.isLoading ? <p role="status" className="mt-4 text-sm">Loading your bookings…</p> : null}
-      {q.error ? <p role="alert" className="mt-4 text-sm">Bookings could not be loaded. Please retry.</p> : null}
+      {q.isLoading ? <ResourceState loading>{null}</ResourceState> : null}
+      {q.error ? <ResourceState error="Bookings could not be loaded. Please retry.">{null}</ResourceState> : null}
       <div className="mt-5 grid gap-3">
         {trips.map(item => (
           <div key={item.booking.id} className="ticket-card p-5">
@@ -97,7 +105,7 @@ function Upcoming({ name }: { name?: string | null }) {
             </div>
           </div>
         ))}
-        {q.data?.upcoming?.length === 0 ? <div className="ticket-card p-5 text-sm"><p>No upcoming trips yet.</p><Link href="/#trip-search" className="mt-3 inline-flex min-h-11 items-center font-semibold text-primary underline">Find a trip</Link></div> : null}
+        {q.data?.upcoming?.length === 0 ? <ResourceState empty emptyTitle="No upcoming trips yet" emptyDescription="When you are ready, search Metro Pro departures and book your next journey."><div><ActionLink href="/#trip-search" variant="primary" className="mt-4">Find a trip</ActionLink></div></ResourceState> : null}
       </div>
       <h2 className="mt-8 font-serif text-2xl">Recent bookings</h2>
       <div className="mt-3 grid gap-2">{(q.data?.previous ?? []).slice(0, 3).map(item => <Link href={`/account/booking/${item.booking.id}`} key={item.booking.id} className="ticket-card block min-h-11 p-4 text-sm"><strong>{item.booking.bookingNumber}</strong> · {item.outbound?.origin?.name} → {item.outbound?.destination?.name} · <span className="capitalize">{item.booking.status.replace("_", " ")}</span></Link>)}{q.data?.previous.length === 0 ? <p className="text-sm text-muted-foreground">No previous bookings yet.</p> : null}</div>
@@ -111,8 +119,9 @@ function Past() {
   const q = trpc.account.overview.useQuery();
   return (
     <div>
-      <h1 className="font-serif text-3xl">Previous trips</h1>
-      {q.isLoading ? <p role="status" className="mt-3 text-sm">Loading your trips…</p> : null}
+      <PageIntro eyebrow="Your travel history" title="Previous trips" description="Review earlier Metro Pro bookings and their details." />
+      {q.isLoading ? <ResourceState loading>{null}</ResourceState> : null}
+      {q.error ? <ResourceState error="Trips could not be loaded. Please retry.">{null}</ResourceState> : null}
       <div className="mt-5 grid gap-3">
         {(q.data?.previous ?? []).map(item => (
           <div key={item.booking.id} className="ticket-card p-5">
@@ -123,7 +132,7 @@ function Past() {
             <Link href={`/account/booking/${item.booking.id}`} className="mt-3 inline-flex min-h-11 items-center font-semibold text-primary underline">Booking details</Link>
           </div>
         ))}
-        {q.data?.previous.length === 0 ? <p className="ticket-card p-5 text-sm text-muted-foreground">No previous trips yet.</p> : null}
+        {q.data?.previous.length === 0 ? <ResourceState empty emptyTitle="No previous trips yet" emptyDescription="Completed and past bookings will appear here.">{null}</ResourceState> : null}
       </div>
     </div>
   );
@@ -133,8 +142,9 @@ function Tickets() {
   const q = trpc.account.tickets.useQuery();
   return (
     <div>
-      <h1 className="font-serif text-3xl">Digital tickets</h1>
-      {q.isLoading ? <p role="status" className="mt-3 text-sm">Loading your tickets…</p> : null}
+      <PageIntro eyebrow="Travel documents" title="Digital tickets" description="Open the QR tickets associated with paid Metro Pro bookings." />
+      {q.isLoading ? <ResourceState loading>{null}</ResourceState> : null}
+      {q.error ? <ResourceState error="Tickets could not be loaded. Please retry.">{null}</ResourceState> : null}
       <div className="mt-5 grid gap-3">
         {(q.data ?? []).flatMap(item =>
           item.tickets.filter(t => t.status !== "voided").map(t => (
@@ -144,7 +154,7 @@ function Tickets() {
             </Link>
           ))
         )}
-        {q.data?.length === 0 ? <p className="ticket-card p-5 text-sm text-muted-foreground">No paid digital tickets yet.</p> : null}
+        {q.data?.length === 0 ? <ResourceState empty emptyTitle="No paid digital tickets yet" emptyDescription="Tickets appear here after a booking is paid and confirmed.">{null}</ResourceState> : null}
       </div>
     </div>
   );
@@ -159,12 +169,13 @@ function MembershipPanel() {
   const monthlyPrice = moneyExact(settings.data?.membershipPriceCents ?? 2500);
   return (
     <div>
-      <h1 className="font-serif text-3xl">Membership</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Status: {overview.data?.membership?.status ?? "None"}
-      </p>
-      {overview.data?.membership?.currentPeriodEnd ? <p className="mt-1 text-sm">Current billing period ends {formatDate(overview.data.membership.currentPeriodEnd)}. {overview.data.membership.freeReschedulesRemaining} complimentary reschedule{overview.data.membership.freeReschedulesRemaining === 1 ? "" : "s"} remaining.</p> : null}
-      <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground">
+      <PageIntro eyebrow="Metro Pro Member" title="Membership" description="Review your membership status, benefits and billing choices." />
+      <div className="ticket-card max-w-2xl p-5 sm:p-7">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+        <span>Status:</span> <StatusBadge status={overview.data?.membership?.status ?? "inactive"} label={overview.data?.membership?.status ?? "None"} />
+      </div>
+      {overview.data?.membership?.currentPeriodEnd ? <p className="mt-3 text-sm">Current billing period ends {formatDate(overview.data.membership.currentPeriodEnd)}. {overview.data.membership.freeReschedulesRemaining} complimentary reschedule{overview.data.membership.freeReschedulesRemaining === 1 ? "" : "s"} remaining.</p> : null}
+      <p className="mt-4 max-w-lg text-sm leading-relaxed text-muted-foreground">
         Metro Pro Member is a {monthlyPrice}-per-month subscription. Once you join through Stripe,
         your payment method is charged now and automatically each month until you cancel.
         Account creation alone does not start the subscription.
@@ -175,19 +186,19 @@ function MembershipPanel() {
         ))}
       </ul>
       {!profile.data?.complete ? (
-        <div className="mt-5 rounded-xl border border-primary/20 bg-secondary p-4 text-sm">
+        <StatusNotice className="mt-5">
           A member profile needs your full name, email, phone and ID photo before you can join or use the member fare.
           <Link href="/account/settings" className="ml-1 font-semibold text-primary underline">Complete your profile</Link>
-        </div>
+        </StatusNotice>
       ) : null}
       {overview.data?.membership?.status === "active" ? (
-        <Link href="/account/payments"><Button className="mt-6">Manage or cancel membership billing</Button></Link>
+        <ActionLink href="/account/payments" variant="primary" className="mt-6 min-h-12">Manage or cancel membership billing</ActionLink>
       ) : profile.data?.complete ? <div className="mt-6 max-w-lg">
         <label className="flex items-start gap-3 rounded-xl border border-border bg-secondary p-4 text-sm leading-relaxed">
           <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-primary" checked={agreed} onChange={event => setAgreed(event.target.checked)} />
           <span>I understand that joining authorizes an automatic {monthlyPrice} charge every month until I cancel.</span>
         </label>
-        <Button className="mt-4" disabled={!agreed || start.isPending} onClick={async () => {
+        <Button className="mt-4 min-h-12" disabled={!agreed || start.isPending} onClick={async () => {
           try {
             const result = await start.mutateAsync({ origin: window.location.origin });
             if (result.checkoutUrl) {
@@ -199,6 +210,7 @@ function MembershipPanel() {
           }
         }}>Subscribe for {monthlyPrice}/month</Button>
       </div> : null}
+      </div>
     </div>
   );
 }
@@ -211,9 +223,9 @@ function Passengers() {
   const [lastName, setLast] = useState("");
   return (
     <div>
-      <h1 className="font-serif text-3xl">Saved passengers</h1>
+      <PageIntro eyebrow="Travel preferences" title="Saved passengers" description="Save frequent travelers to make future bookings quicker." />
       <form
-        className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+        className="ticket-card grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:p-5"
         onSubmit={e => {
           e.preventDefault();
           add.mutate({ firstName, lastName });
@@ -221,9 +233,9 @@ function Passengers() {
           setLast("");
         }}
       >
-        <Input placeholder="First" value={firstName} onChange={e => setFirst(e.target.value)} required />
-        <Input placeholder="Last" value={lastName} onChange={e => setLast(e.target.value)} required />
-        <Button type="submit" className="min-h-10">Save</Button>
+        <Input placeholder="First" className="metro-control" value={firstName} onChange={e => setFirst(e.target.value)} required />
+        <Input placeholder="Last" className="metro-control" value={lastName} onChange={e => setLast(e.target.value)} required />
+        <Button type="submit" className="min-h-12">Save</Button>
       </form>
       <div className="mt-4 grid gap-2">
         {(q.data ?? []).map(p => (
@@ -236,6 +248,7 @@ function Passengers() {
             </Button>
           </div>
         ))}
+        <ResourceState loading={q.isLoading} error={q.error ? "Saved passengers could not be loaded. Please retry." : null} empty={!q.isLoading && !q.error && (q.data?.length ?? 0) === 0} emptyTitle="No saved passengers yet" emptyDescription="Add a frequent traveler above to keep their name ready for your next booking.">{null}</ResourceState>
       </div>
     </div>
   );
@@ -245,13 +258,14 @@ function Payments() {
   const portal = trpc.account.billingPortal.useMutation();
   return (
     <div>
-      <h1 className="font-serif text-3xl">Payment methods</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
+      <PageIntro eyebrow="Billing" title="Payment methods" description="Manage payment details held securely by Stripe." />
+      <div className="ticket-card max-w-xl p-5 sm:p-6">
+      <p className="text-sm leading-relaxed text-muted-foreground">
         Cards are stored with Stripe, never in Metro Pro. Use the Stripe portal to manage
         or cancel your automatic monthly membership subscription.
       </p>
       <Button
-        className="mt-4"
+        className="mt-5 min-h-12"
         onClick={async () => {
           try {
             const r = await portal.mutateAsync({ origin: window.location.origin });
@@ -263,6 +277,7 @@ function Payments() {
       >
         Manage in Stripe
       </Button>
+      </div>
     </div>
   );
 }
@@ -275,7 +290,9 @@ function Receipts() {
   );
   return (
     <div>
-      <h1 className="font-serif text-3xl">Receipts</h1>
+      <PageIntro eyebrow="Billing history" title="Receipts" description="Review booking payments and monthly membership invoices." />
+      {q.isLoading ? <ResourceState loading>{null}</ResourceState> : null}
+      {q.error ? <ResourceState error="Receipt records could not be loaded. Please retry.">{null}</ResourceState> : null}
       {invoices.data?.length ? <div className="mt-5">
         <h2 className="font-serif text-xl">Monthly membership invoices</h2>
         <div className="mt-3 grid gap-2">
@@ -290,7 +307,7 @@ function Receipts() {
           ))}
         </div>
       </div> : null}
-      {invoices.error ? <p className="mt-4 text-sm text-muted-foreground">Stripe invoice history is temporarily unavailable. Open Payment methods to view your subscription in Stripe.</p> : null}
+      {invoices.error ? <StatusNotice tone="pending" className="mt-4">Stripe invoice history is temporarily unavailable. Open Payment methods to view your subscription in Stripe.</StatusNotice> : null}
       {localPayments.length ? <h2 className="mt-6 font-serif text-xl">Booking and local payment records</h2> : null}
       <div className="mt-4 grid gap-2">
         {localPayments.map(p => (
@@ -316,7 +333,7 @@ function Notes() {
   const read = trpc.account.markRead.useMutation({ onSuccess: () => q.refetch() });
   return (
     <div>
-      <h1 className="font-serif text-3xl">Notifications</h1>
+      <PageIntro eyebrow="Account updates" title="Notifications" description="Open a message to mark it as read." />
       <div className="mt-4 grid gap-2">
         {(q.data ?? []).map(n => (
           <button
@@ -328,6 +345,7 @@ function Notes() {
             <div className="text-sm text-muted-foreground">{n.body}</div>
           </button>
         ))}
+        <ResourceState loading={q.isLoading} error={q.error ? "Notifications could not be loaded. Please retry." : null} empty={!q.isLoading && !q.error && (q.data?.length ?? 0) === 0} emptyTitle="No notifications yet" emptyDescription="Booking and membership updates will appear here.">{null}</ResourceState>
       </div>
     </div>
   );
@@ -341,22 +359,19 @@ function Support() {
   const [message, setMessage] = useState("");
   return (
     <div>
-      <h1 className="font-serif text-3xl">Customer support</h1>
+      <PageIntro eyebrow="Need a hand?" title="Customer support" description="Send a question to the Metro Pro team." />
       <form
-        className="mt-4 grid gap-3"
+        className="ticket-card grid max-w-xl gap-4 p-5 sm:p-6"
         onSubmit={e => {
           e.preventDefault();
           send.mutate({ subject, message });
         }}
       >
-        <Input placeholder="Subject" value={subject} onChange={e => setSubject(e.target.value)} required />
-        <textarea
-          className="min-h-32 rounded-md border border-input p-3"
-          value={message}
-          onChange={e => setMessage(e.target.value)}
-          required
-        />
-        <Button type="submit">Send</Button>
+        <div className="form-field"><Label className="metro-form-label" htmlFor="support-subject">Subject</Label><Input id="support-subject" placeholder="Subject" className="metro-control" value={subject} onChange={e => setSubject(e.target.value)} required /></div>
+        <div className="form-field"><Label className="metro-form-label" htmlFor="support-message">Message</Label>
+          <textarea id="support-message" className="metro-control min-h-32 p-3" value={message} onChange={e => setMessage(e.target.value)} required />
+        </div>
+        <Button type="submit" className="min-h-12">Send</Button>
       </form>
     </div>
   );
@@ -434,34 +449,30 @@ function Settings({
   }
   return (
     <div>
-      <h1 className="font-serif text-3xl">Your member profile</h1>
-      <p className="mt-2 max-w-lg text-sm leading-relaxed text-muted-foreground">
-        Your full name, email, phone number and ID photo are required before joining Metro Pro Member.
-        Guest tickets never require an account or ID upload.
-      </p>
-      <div className={`mt-5 rounded-xl border px-4 py-3 text-sm ${profile.data?.complete ? "border-[#b7e2d3] bg-[#edfaf3] text-[#176447]" : "border-border bg-secondary text-foreground"}`}>
+      <PageIntro eyebrow="Metro Pro Member" title="Your member profile" description="Your full name, email, phone number and ID photo are required before joining Metro Pro Member. Guest tickets never require an account or ID upload." />
+      <StatusNotice tone={profile.data?.complete ? "success" : "info"}>
         {profile.isLoading ? "Checking your profile…" : profile.data?.complete ? "Profile complete — membership is available." : "Profile incomplete — add every required field and your ID photo."}
-      </div>
+      </StatusNotice>
       <form
-        className="mt-6 grid max-w-md min-w-0 gap-4"
+        className="ticket-card mt-6 grid max-w-md min-w-0 gap-4 p-5 sm:p-6"
         onSubmit={onSave}
       >
-        <div>
-          <Label htmlFor="member-name">Full name *</Label>
-          <Input id="member-name" className="mt-1 h-12" autoComplete="name" value={name} onChange={e => setName(e.target.value)} required />
+        <div className="form-field">
+          <Label className="metro-form-label" htmlFor="member-name">Full name *</Label>
+          <Input id="member-name" className="metro-control" autoComplete="name" value={name} onChange={e => setName(e.target.value)} required />
         </div>
-        <div>
-          <Label htmlFor="member-email">Email *</Label>
-          <Input id="member-email" type="email" className="mt-1 h-12" autoComplete="email" value={mail} onChange={e => setMail(e.target.value)} required />
+        <div className="form-field">
+          <Label className="metro-form-label" htmlFor="member-email">Email *</Label>
+          <Input id="member-email" type="email" className="metro-control" autoComplete="email" value={mail} onChange={e => setMail(e.target.value)} required />
         </div>
-        <div>
-          <Label htmlFor="member-phone">Phone number *</Label>
-          <Input id="member-phone" type="tel" className="mt-1 h-12" autoComplete="tel" value={tel} onChange={e => setTel(e.target.value)} required />
+        <div className="form-field">
+          <Label className="metro-form-label" htmlFor="member-phone">Phone number *</Label>
+          <Input id="member-phone" type="tel" className="metro-control" autoComplete="tel" value={tel} onChange={e => setTel(e.target.value)} required />
         </div>
         <div className="min-w-0 rounded-xl border border-dashed border-primary/35 bg-[#f4fbfd] p-4">
-          <Label htmlFor="member-id">Picture of your ID *</Label>
+          <Label className="metro-form-label" htmlFor="member-id">Picture of your ID *</Label>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Choose a JPEG, PNG or WebP photo up to 25 MB (HEIC if supported). It is resized and compressed on your device before an under-2-MB encrypted upload. Make sure the ID text is clear.</p>
-          <Input id="member-id" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" className="mt-3 h-auto min-h-12 min-w-0 bg-white py-2" required={!profile.data?.idPhotoUploadedAt}
+          <Input id="member-id" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" className="metro-control mt-3 h-auto min-w-0 py-2" required={!profile.data?.idPhotoUploadedAt}
             onChange={e => setPhoto(e.target.files?.[0] ?? null)} />
           {profile.data?.idPhotoUploadedAt ? <p className="mt-2 text-xs font-semibold text-primary">ID photo on file · {new Date(profile.data.idPhotoUploadedAt).toLocaleDateString()} · choose a new image to replace it</p> : null}
           {photo ? <p className="mt-2 text-xs">Selected: {photo.name}</p> : null}
@@ -472,7 +483,7 @@ function Settings({
           ) : null}
           {idPreviewUrl ? <img src={idPreviewUrl} alt="Your uploaded ID photo" className="mt-3 max-h-64 max-w-full rounded-lg border border-border object-contain" /> : null}
         </div>
-        <Button type="submit" className="h-12" disabled={saving || profile.isLoading}>{saving ? "Saving securely…" : "Save member profile"}</Button>
+        <Button type="submit" className="min-h-12" disabled={saving || profile.isLoading}>{saving ? "Saving securely…" : "Save member profile"}</Button>
       </form>
       {profile.data?.complete ? <Link href="/account/membership" className="mt-5 inline-block text-sm font-semibold text-primary underline">Continue to membership</Link> : null}
     </div>

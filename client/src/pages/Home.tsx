@@ -7,6 +7,7 @@ import { ADMIN_LOGIN_INTENT_KEY } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { StatusNotice } from "@/components/MetroUI";
 import { isoDate } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -23,6 +24,9 @@ export default function Home() {
   const routesQuery = trpc.public.routes.useQuery();
   const routes = routesQuery.data ?? [];
   const cities = citiesQuery.data ?? [];
+  const routesLoading = routesQuery.isLoading || citiesQuery.isLoading;
+  const routesUnavailable = routesQuery.isError || citiesQuery.isError;
+  const retryRoutes = () => { void routesQuery.refetch(); void citiesQuery.refetch(); };
   const defaultRoute = routes.find(route => route.origin.code === "NYC" && route.destination.code === "CMH") ?? routes[0];
   const [originId, setOriginId] = useState<number | null>(null);
   const [destId, setDestId] = useState<number | null>(null);
@@ -152,8 +156,8 @@ export default function Home() {
       </section>
 
       <div className="relative z-10 -mt-12 pb-9 sm:-mt-16 lg:-mt-24">
-        <div className="container max-w-[1220px]">
-          <form id="trip-search" onSubmit={search} className="scroll-mt-24 rounded-2xl border border-[#e4e7ec] bg-white px-5 py-6 text-[#17202a] shadow-[0_20px_65px_-25px_rgba(12,49,61,0.4)] sm:px-7 sm:py-7" aria-label="Search Metro Pro departures">
+        <div className="container">
+          <form id="trip-search" onSubmit={search} className="ticket-card scroll-mt-24 px-5 py-6 sm:px-7 sm:py-7" aria-label="Search Metro Pro departures">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-serif text-2xl font-bold">Book your journey</h2>
               <p className="text-xs font-medium text-[#667085]">{isAuthenticated ? "Your trip will be saved to your account" : "Guest booking · No sign-in needed"}</p>
@@ -162,47 +166,48 @@ export default function Home() {
               <button type="button" aria-pressed={tripType === "one_way"} className={`min-h-11 border-b-2 px-1 ${tripType === "one_way" ? "border-primary text-primary" : "border-transparent text-[#667085]"}`} onClick={() => setTripType("one_way")}>One way</button>
               <button type="button" aria-pressed={tripType === "round_trip"} className={`min-h-11 border-b-2 px-1 ${tripType === "round_trip" ? "border-primary text-primary" : "border-transparent text-[#667085]"}`} onClick={() => setTripType("round_trip")}>Round trip</button>
             </div>
-            <div className="mt-5 grid min-w-0 items-end gap-4 md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.65fr)]">
+            <div className="mt-5 grid min-w-0 items-end gap-4 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.65fr)]">
               <div className="form-field">
-                <Label htmlFor="trip-origin" className="text-xs font-bold uppercase tracking-wider text-[#667085]">From</Label>
-                <select id="trip-origin" className="h-12 w-full rounded-lg border border-[#d0d5dd] bg-white px-3 text-base" value={origin} onChange={event => { setOriginId(Number(event.target.value)); setDestId(null); }} required>
-                  {origins.length ? origins.map(city => <option key={city.id} value={city.id}>{city.name}, {city.state}</option>) : <option value="0">Loading routes…</option>}
+                <Label htmlFor="trip-origin" className="metro-form-label">From</Label>
+                <select id="trip-origin" className="metro-control" value={origin} onChange={event => { setOriginId(Number(event.target.value)); setDestId(null); }} disabled={routesLoading || routesUnavailable} required>
+                  {origins.length ? origins.map(city => <option key={city.id} value={city.id}>{city.name}, {city.state}</option>) : <option value="0">{routesUnavailable ? "Routes unavailable" : routesLoading ? "Loading routes…" : "No current routes"}</option>}
                 </select>
               </div>
-              <Button type="button" variant="outline" className="h-11 w-11 justify-self-center rounded-full p-0 md:mb-0.5" onClick={swap} disabled={!routes.some(route => route.originCityId === dest && route.destinationCityId === origin)} aria-label="Swap departure and destination"><ArrowRightLeft size={17} aria-hidden="true" /></Button>
+              <Button type="button" variant="outline" className="h-11 w-11 justify-self-center rounded-full p-0 lg:mb-0.5" onClick={swap} disabled={!routes.some(route => route.originCityId === dest && route.destinationCityId === origin)} aria-label="Swap departure and destination"><ArrowRightLeft size={17} aria-hidden="true" /></Button>
               <div className="form-field">
-                <Label htmlFor="trip-destination" className="text-xs font-bold uppercase tracking-wider text-[#667085]">To</Label>
-                <select id="trip-destination" className="h-12 w-full rounded-lg border border-[#d0d5dd] bg-white px-3 text-base" value={dest} onChange={event => setDestId(Number(event.target.value))} required>
-                  {destinations.length ? destinations.map(city => <option key={city.id} value={city.id}>{city.name}, {city.state}</option>) : <option value="0">Select a route</option>}
+                <Label htmlFor="trip-destination" className="metro-form-label">To</Label>
+                <select id="trip-destination" className="metro-control" value={dest} onChange={event => setDestId(Number(event.target.value))} disabled={routesLoading || routesUnavailable} required>
+                  {destinations.length ? destinations.map(city => <option key={city.id} value={city.id}>{city.name}, {city.state}</option>) : <option value="0">{routesUnavailable ? "Routes unavailable" : routesLoading ? "Loading routes…" : "Select a route"}</option>}
                 </select>
               </div>
               <div className="form-field">
-                <Label htmlFor="trip-departure" className="text-xs font-bold uppercase tracking-wider text-[#667085]">Departure date</Label>
+                <Label htmlFor="trip-departure" className="metro-form-label">Departure date</Label>
                 <Input id="trip-departure" type="date" min={isoDate()} className="h-12 w-full bg-white" value={departDate} onChange={event => setDepartDate(event.target.value)} required />
               </div>
               <div className="form-field">
-                <Label htmlFor="trip-passengers" className="text-xs font-bold uppercase tracking-wider text-[#667085]">Passengers</Label>
+                <Label htmlFor="trip-passengers" className="metro-form-label">Passengers</Label>
                 <Input id="trip-passengers" type="number" min={1} max={12} className="h-12 w-full bg-white" value={passengers} onChange={event => setPassengers(Number(event.target.value))} required />
               </div>
             </div>
             <div className="mt-5 flex flex-wrap items-end justify-between gap-4">
               {tripType === "round_trip" ? (
                 <div className="form-field min-w-48">
-                  <Label htmlFor="trip-return" className="text-xs font-bold uppercase tracking-wider text-[#667085]">Return date</Label>
+                  <Label htmlFor="trip-return" className="metro-form-label">Return date</Label>
                   <Input id="trip-return" type="date" min={departDate} className="h-12 bg-white" value={returnDate} onChange={event => setReturnDate(event.target.value)} required />
                 </div>
               ) : <p className="text-sm text-[#667085]">Select your exact seat after choosing a departure.</p>}
-              <Button type="submit" className="h-12 w-full px-7 text-sm font-bold uppercase tracking-wide sm:w-auto" disabled={!origin || !dest || origin === dest || !routes.length || (tripType === "round_trip" && !routes.some(route => route.originCityId === dest && route.destinationCityId === origin))}>
+              <Button type="submit" className="h-12 w-full px-7 text-sm font-bold uppercase tracking-wide sm:w-auto" disabled={routesLoading || routesUnavailable || !origin || !dest || origin === dest || !routes.length || (tripType === "round_trip" && !routes.some(route => route.originCityId === dest && route.destinationCityId === origin))}>
                 <Search size={17} className="mr-2" aria-hidden="true" /> Search trips
               </Button>
             </div>
+            {routesUnavailable ? <StatusNotice tone="error" className="mt-5">Departure routes could not be loaded. <button type="button" className="min-h-11 font-bold underline underline-offset-4" onClick={retryRoutes}>Try again</button></StatusNotice> : null}
           </form>
         </div>
       </div>
 
       <section className="bg-[#f7f8fa] py-12" aria-label="Find a booking or sign in">
-        <div className="container grid max-w-[1220px] gap-6 lg:grid-cols-2">
-          <div id="booking-lookup" className="scroll-mt-24 rounded-xl border border-[#e4e7ec] bg-white p-6">
+        <div className="container grid gap-6 lg:grid-cols-2">
+          <div id="booking-lookup" className="ticket-card scroll-mt-24 p-6">
             <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-primary"><LockKeyhole size={17} aria-hidden="true" /> Your trip details</p>
             <h2 className="mt-3 font-serif text-2xl">Already have a booking?</h2>
             <p className="mt-2 text-sm leading-relaxed text-[#667085]">Enter your booking reference. Guest bookings not in your account also require the private access code from your checkout link.</p>
@@ -216,7 +221,7 @@ export default function Home() {
               {lookupError ? <p role="alert" className="text-sm text-destructive sm:col-span-2">{lookupError}</p> : null}
             </form>
           </div>
-          <div id="member-sign-in" className="scroll-mt-24 rounded-xl border border-[#e4e7ec] bg-white p-6">
+          <div id="member-sign-in" className="ticket-card scroll-mt-24 p-6">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Your account</p>
             <h2 className="mt-3 font-serif text-2xl">Member sign in</h2>
             <form onSubmit={submitMemberSignIn} className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -232,7 +237,7 @@ export default function Home() {
         </div>
       </section>
 
-      <PopularRoutes routes={routes} date={departDate} />
+      <PopularRoutes routes={routes} date={departDate} loading={routesLoading} error={routesUnavailable} onRetry={retryRoutes} />
       <WhyMetroPro />
       <HowItWorks />
       <DigitalTicketStory route={defaultRoute} />

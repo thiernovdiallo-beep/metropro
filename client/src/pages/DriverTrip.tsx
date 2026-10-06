@@ -1,9 +1,24 @@
 import { PageShell } from "@/components/Brand";
+import { PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatTime } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import {
+  AlertTriangle,
+  Camera,
+  Check,
+  CirclePlay,
+  Clock3,
+  MapPin,
+  MessageSquare,
+  Printer,
+  ScanLine,
+  UserCheck,
+  UserX,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRoute } from "wouter";
 
@@ -110,53 +125,161 @@ export default function DriverTrip() {
 
   const t = trip.data;
   const boarded = (t?.manifest ?? []).filter(p => p.status === "boarded").length;
-  return <PageShell><div className="container py-8">
-    <h1 className="font-serif text-3xl">{t?.origin?.name} → {t?.destination?.name}</h1>
-    <p className="text-muted-foreground">{t?.departure ? formatTime(t.departure.departAt) : ""} · {t?.vehicle?.code} · {t?.departure?.status}</p>
-    <p className="mt-2 text-sm font-semibold text-primary">{boarded}/{t?.manifest?.length ?? 0} passengers boarded</p>
-    <div className="mt-4 flex flex-wrap gap-2">
-      <Button disabled={t?.departure?.status !== "scheduled" && t?.departure?.status !== "delayed"} onClick={() => start.mutate({ departureId: id })}>Start boarding</Button>
-      <Button variant="secondary" disabled={t?.departure?.status !== "boarding"} onClick={() => depart.mutate({ departureId: id })}>Mark departure</Button>
-      <Button variant="secondary" disabled={t?.departure?.status !== "departed"} onClick={() => arrive.mutate({ departureId: id })}>Mark arrival</Button>
-      <Button variant="outline" disabled={t?.departure?.status !== "arrived"} onClick={() => complete.mutate({ departureId: id })}>Complete trip</Button>
-    </div>
-    <section className="ticket-card no-print mt-6 p-4 sm:p-5">
-      <h2 className="font-semibold">Scan passenger QR ticket</h2>
-      <p className="mt-1 text-sm text-muted-foreground">Start boarding first. Ask each passenger to show their individual ticket; scanning confirms boarding for this trip only.</p>
-      <video ref={videoRef} autoPlay muted playsInline aria-label="Ticket QR camera preview" className={`mt-3 max-h-64 w-full rounded-md bg-primary/10 object-cover ${scanning ? "block" : "hidden"}`} />
-      <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
-        <Button type="button" variant="outline" disabled={!scanning && t?.departure?.status !== "boarding"} onClick={scanning ? stopCamera : startCamera}>{scanning ? "Close camera" : "Open camera"}</Button>
-        <Input aria-label="Enter ticket code manually" placeholder="Or enter ticket QR code" value={token} onChange={e => setToken(e.target.value)} />
-        <Button disabled={t?.departure?.status !== "boarding" || scan.isPending || token.trim().length < 12} onClick={() => board(token)}>Confirm boarding</Button>
+  const passengerCount = t?.manifest?.length ?? 0;
+
+  return (
+    <PageShell>
+      <div className="container py-8 sm:py-10 lg:py-12">
+        <ResourceState
+          loading={trip.isLoading}
+          error={trip.error?.message}
+          empty={!t}
+          emptyTitle="Trip unavailable"
+          emptyDescription="This assigned trip could not be found. Return to the driver portal and select another assignment."
+          onRetry={() => void trip.refetch()}
+        >
+          <>
+            <PageIntro
+              eyebrow="Driver operations"
+              title={`${t?.origin?.name} → ${t?.destination?.name}`}
+              description={
+                <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span>{t?.departure ? formatTime(t.departure.departAt) : ""}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>Vehicle {t?.vehicle?.code ?? "unassigned"}</span>
+                  {t?.departure ? <StatusBadge status={t.departure.status} /> : null}
+                </span>
+              }
+              actions={
+                <Button type="button" variant="outline" className="no-print" onClick={() => window.print()} disabled={!t}>
+                  <Printer aria-hidden="true" />Print assigned manifest
+                </Button>
+              }
+            />
+
+            <section className="ticket-card p-5 sm:p-6" aria-label="Trip boarding summary">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="metro-eyebrow">Boarding progress</p>
+                  <p className="font-serif text-3xl font-semibold tracking-tight text-primary">{boarded}/{passengerCount}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">passengers boarded</p>
+                </div>
+                {t?.departure ? <StatusBadge status={t.departure.status} className="mt-1" /> : null}
+              </div>
+              <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:flex xl:flex-wrap">
+                <Button className="w-full xl:w-auto" disabled={t?.departure?.status !== "scheduled" && t?.departure?.status !== "delayed"} onClick={() => start.mutate({ departureId: id })}>
+                  <CirclePlay aria-hidden="true" />Start boarding
+                </Button>
+                <Button className="w-full xl:w-auto" variant="secondary" disabled={t?.departure?.status !== "boarding"} onClick={() => depart.mutate({ departureId: id })}>
+                  <MapPin aria-hidden="true" />Mark departure
+                </Button>
+                <Button className="w-full xl:w-auto" variant="secondary" disabled={t?.departure?.status !== "departed"} onClick={() => arrive.mutate({ departureId: id })}>
+                  <MapPin aria-hidden="true" />Mark arrival
+                </Button>
+                <Button className="w-full xl:w-auto" variant="outline" disabled={t?.departure?.status !== "arrived"} onClick={() => complete.mutate({ departureId: id })}>
+                  <Check aria-hidden="true" />Complete trip
+                </Button>
+              </div>
+            </section>
+
+            <section className="ticket-card no-print mt-6 p-5 sm:p-6" aria-labelledby="scan-ticket-heading">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="metro-eyebrow">Boarding tool</p>
+                  <h2 id="scan-ticket-heading" className="metro-section-title">Scan passenger QR ticket</h2>
+                </div>
+                {t?.departure ? <StatusBadge status={t.departure.status} /> : null}
+              </div>
+              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">Start boarding first. Ask each passenger to show their individual ticket; scanning confirms boarding for this trip only.</p>
+              <video ref={videoRef} autoPlay muted playsInline aria-label="Ticket QR camera preview" className={`mt-4 max-h-72 w-full rounded-xl border border-border bg-primary/10 object-cover ${scanning ? "block" : "hidden"}`} />
+              <div className="mt-4 grid min-w-0 gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
+                <Button type="button" variant="outline" className="w-full sm:w-auto" disabled={!scanning && t?.departure?.status !== "boarding"} onClick={scanning ? stopCamera : startCamera}>
+                  {scanning ? <X aria-hidden="true" /> : <Camera aria-hidden="true" />}{scanning ? "Close camera" : "Open camera"}
+                </Button>
+                <Input aria-label="Enter ticket code manually" placeholder="Or enter ticket QR code" value={token} onChange={e => setToken(e.target.value)} />
+                <Button className="w-full sm:w-auto" disabled={t?.departure?.status !== "boarding" || scan.isPending || token.trim().length < 12} onClick={() => board(token)}>
+                  <ScanLine aria-hidden="true" />Confirm boarding
+                </Button>
+              </div>
+              {scanResult ? (
+                <StatusNotice tone={scanResult.state === "valid" ? "success" : scanResult.state === "already" ? "pending" : "error"} className="mt-4">
+                  <div className="flex min-w-0 flex-wrap items-start gap-2">
+                    <StatusBadge
+                      status={scanResult.state === "valid" ? "confirmed" : scanResult.state === "already" ? "boarding" : "failed"}
+                      label={scanResult.state === "valid" ? "VALID" : scanResult.state === "already" ? "ALREADY BOARDED" : "INVALID"}
+                    />
+                    <span className="min-w-0 flex-1 font-semibold">{scanResult.message}</span>
+                  </div>
+                </StatusNotice>
+              ) : null}
+            </section>
+
+            <section className="manifest-print ticket-card mt-8 p-5 sm:p-6" aria-label="Passenger manifest">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="metro-eyebrow">Passenger manifest</p>
+                  <h2 className="metro-section-title">Booked passengers · {t?.origin?.name} <span aria-hidden="true">→</span> {t?.destination?.name}</h2>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    {t?.departure ? formatTime(t.departure.departAt) : ""} · Vehicle {t?.vehicle?.code ?? "unassigned"} · {boarded}/{passengerCount} boarded
+                  </p>
+                </div>
+                {t?.departure ? <StatusBadge status={t.departure.status} /> : null}
+              </div>
+              <div className="mt-5 grid gap-3">
+                {(t?.manifest ?? []).map(p => (
+                  <article key={p.ticketId} className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-background/45 p-4">
+                    <div className="min-w-0">
+                      <div className="font-semibold">{p.firstName} {p.lastName}</div>
+                      <div className="mt-1 break-words text-xs leading-relaxed text-muted-foreground">
+                        {p.bookingNumber} · {p.phone} · {p.seatNumber ? `Seat ${p.seatNumber}` : p.seatType === "front" ? "Front seat" : "Regular seat"} · Paid
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <StatusBadge status={p.status} />
+                        {p.boardedAt ? <span className="text-xs font-medium text-muted-foreground">{formatTime(p.boardedAt)}</span> : null}
+                      </div>
+                    </div>
+                    {p.status !== "boarded" ? (
+                      <div className="no-print flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
+                        <Button size="sm" variant="outline" className="flex-1 sm:flex-none" disabled={t?.departure?.status !== "boarding"} onClick={() => setStatus.mutate({ passengerId: p.id, departureId: id, status: "checked_in" })}>
+                          <UserCheck aria-hidden="true" />Check in
+                        </Button>
+                        <Button size="sm" variant="outline" className="flex-1 sm:flex-none" disabled={t?.departure?.status !== "boarding" && t?.departure?.status !== "departed"} onClick={() => setStatus.mutate({ passengerId: p.id, departureId: id, status: "no_show" })}>
+                          <UserX aria-hidden="true" />No-show
+                        </Button>
+                      </div>
+                    ) : null}
+                  </article>
+                ))}
+                {!trip.isLoading && !t?.manifest?.length ? (
+                  <StatusNotice tone="info">No paid tickets on this trip yet.</StatusNotice>
+                ) : null}
+              </div>
+            </section>
+
+            <section className="no-print ticket-card mt-8 p-5 sm:p-6" aria-labelledby="trip-support-heading">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-primary" aria-hidden="true" />
+                <h2 id="trip-support-heading" className="metro-section-title">Trip support</h2>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">Add a concise note before reporting a delay, contacting dispatch, or flagging a vehicle problem.</p>
+              <Input className="mt-4" aria-label="Dispatch note" placeholder="Delay, dispatch, or vehicle note" value={note} onChange={e => setNote(e.target.value)} />
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:flex xl:flex-wrap">
+                <Button variant="outline" className="w-full xl:w-auto" onClick={() => delay.mutate({ departureId: id, reason: note })}>
+                  <Clock3 aria-hidden="true" />Report delay
+                </Button>
+                <Button variant="outline" className="w-full xl:w-auto" onClick={() => dispatch.mutate({ departureId: id, message: note })}>
+                  <MessageSquare aria-hidden="true" />Contact dispatch
+                </Button>
+                {t?.vehicle ? (
+                  <Button variant="outline" className="w-full xl:w-auto" onClick={() => vehicleIssue.mutate({ vehicleId: t.vehicle!.id, departureId: id, message: note })}>
+                    <AlertTriangle aria-hidden="true" />Report vehicle problem
+                  </Button>
+                ) : null}
+              </div>
+            </section>
+          </>
+        </ResourceState>
       </div>
-      {scanResult ? <p role="status" aria-live="polite" className={`mt-3 rounded-xl border p-3 text-sm font-semibold ${scanResult.state === "valid" ? "border-green-300 bg-green-50 text-green-900" : scanResult.state === "already" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-red-300 bg-red-50 text-red-900"}`}>{scanResult.state === "valid" ? "VALID" : scanResult.state === "already" ? "ALREADY BOARDED" : "INVALID"} · {scanResult.message}</p> : null}
-    </section>
-    <div className="no-print mt-7"><Button variant="outline" className="min-h-11" onClick={() => window.print()} disabled={!t}>Print assigned manifest</Button></div>
-    <section className="manifest-print mt-8" aria-label="Passenger manifest">
-    <h2 className="font-serif text-xl">Booked passengers · {t?.origin?.name} → {t?.destination?.name}</h2>
-    <p className="mt-1 text-xs text-muted-foreground">{t?.departure ? formatTime(t.departure.departAt) : ""} · Vehicle {t?.vehicle?.code ?? "unassigned"} · {boarded}/{t?.manifest?.length ?? 0} boarded</p>
-    <div className="mt-3 grid gap-2">
-      {(t?.manifest ?? []).map(p => <div key={p.ticketId} className="ticket-card flex flex-wrap items-center justify-between gap-3 p-4">
-        <div className="min-w-0">
-          <div className="font-medium">{p.firstName} {p.lastName}</div>
-          <div className="text-xs text-muted-foreground">{p.bookingNumber} · {p.phone} · {p.seatNumber ? `Seat ${p.seatNumber}` : p.seatType === "front" ? "Front seat" : "Regular seat"} · Paid</div>
-          <div className="mt-1 text-xs font-semibold capitalize text-primary">{p.status.replace("_", " ")}{p.boardedAt ? ` · ${formatTime(p.boardedAt)}` : ""}</div>
-        </div>
-        {p.status !== "boarded" ? <div className="no-print flex flex-wrap gap-1">
-          <Button size="sm" variant="outline" disabled={t?.departure?.status !== "boarding"} onClick={() => setStatus.mutate({ passengerId: p.id, departureId: id, status: "checked_in" })}>Check in</Button>
-          <Button size="sm" variant="outline" disabled={t?.departure?.status !== "boarding" && t?.departure?.status !== "departed"} onClick={() => setStatus.mutate({ passengerId: p.id, departureId: id, status: "no_show" })}>No-show</Button>
-        </div> : null}
-      </div>)}
-      {!trip.isLoading && !t?.manifest?.length ? <p className="text-sm text-muted-foreground">No paid tickets on this trip yet.</p> : null}
-    </div>
-    </section>
-    <div className="no-print mt-8 grid gap-2">
-      <Input aria-label="Dispatch note" placeholder="Delay, dispatch, or vehicle note" value={note} onChange={e => setNote(e.target.value)} />
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={() => delay.mutate({ departureId: id, reason: note })}>Report delay</Button>
-        <Button variant="outline" onClick={() => dispatch.mutate({ departureId: id, message: note })}>Contact dispatch</Button>
-        {t?.vehicle ? <Button variant="outline" onClick={() => vehicleIssue.mutate({ vehicleId: t.vehicle!.id, departureId: id, message: note })}>Report vehicle problem</Button> : null}
-      </div>
-    </div>
-  </div></PageShell>;
+    </PageShell>
+  );
 }

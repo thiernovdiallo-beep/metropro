@@ -1,4 +1,5 @@
 import { PageShell } from "@/components/Brand";
+import { ActionLink, BookingProgress, PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatTime, money } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
@@ -118,10 +119,11 @@ export default function Checkout() {
   if (!draft) {
     return (
       <PageShell>
-        <div className="container py-16">
-          <p>No booking in progress.</p>
-          <Link href="/"><Button className="mt-4">Start over</Button></Link>
-        </div>
+        <main className="metro-page metro-page--readable">
+          <PageIntro eyebrow="Your trip" title="Review your booking" description="Your booking details are kept only while you move through the secure checkout flow." />
+          <ResourceState empty emptyTitle="No booking in progress" emptyDescription="Start a new search to choose a departure and traveler details."><></></ResourceState>
+          <ActionLink href="/" variant="primary" className="mt-5">Start over</ActionLink>
+        </main>
       </PageShell>
     );
   }
@@ -129,18 +131,19 @@ export default function Checkout() {
   const q = quote.data;
   return (
     <PageShell>
-      <div className="container max-w-2xl py-10">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Your trip · Step 5</p>
-        <h1 className="mt-2 font-serif text-3xl">Review your booking</h1>
-        {canceled ? <p role="status" className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm">Stripe Checkout was closed without a confirmed payment. {paymentUrl ? "Resume the same Checkout session below before its temporary seat hold expires." : "The session may have expired. Choose available seats to start a new booking."} Returning here is not proof of payment.</p> : null}
-        {quote.isLoading ? <p className="mt-6 text-sm text-muted-foreground">Checking seats and fares…</p> : null}
+      <main className="metro-page metro-page--readable">
+        <BookingProgress current="Review" />
+        <PageIntro eyebrow="Your trip · Step 5" title="Review your booking" description="Confirm your itinerary, traveler details, and total before opening Stripe Checkout." />
+        {canceled ? <StatusNotice tone="pending" className="mb-6">Stripe Checkout was closed without a confirmed payment. {paymentUrl ? "Resume the same Checkout session below before its temporary seat hold expires." : "The session may have expired. Choose available seats to start a new booking."} Returning here is not proof of payment.</StatusNotice> : null}
+        {quote.isLoading ? <div className="mb-6"><ResourceState loading>Checking seats and fares…</ResourceState></div> : null}
         {quote.error ? (
-          <div role="alert" className="mt-6 rounded-xl border border-destructive/30 bg-red-50 p-4 text-sm text-destructive">
-            {paymentUrl ? "Your seats are held by this existing Checkout session. Resume it below or use your private booking link to check payment status." : quote.error.message} {!paymentUrl ? <Link href={`/seats?out=${outId}&pax=${pax}${retId ? `&ret=${retId}` : ""}${draft.search ? `&search=${encodeURIComponent(draft.search)}` : ""}`} className="ml-2 underline">Choose different seats</Link> : null}
-          </div>
+          <StatusNotice tone="error" className="mb-6">
+            {paymentUrl ? "Your seats are held by this existing Checkout session. Resume it below or use your private booking link to check payment status." : quote.error.message} {!paymentUrl ? <Link href={`/seats?out=${outId}&pax=${pax}${retId ? `&ret=${retId}` : ""}${draft.search ? `&search=${encodeURIComponent(draft.search)}` : ""}`} className="ml-2 font-semibold underline underline-offset-4">Choose different seats</Link> : null}
+          </StatusNotice>
         ) : null}
         {q ? (
-          <div className="ticket-card mt-6 space-y-5 p-5 sm:p-7">
+          <section className="ticket-card space-y-5 p-5 sm:p-7" aria-label="Booking review">
+            <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-serif text-xl">Itinerary and fare</h2><StatusBadge status={paymentUrl ? "pending_payment" : "open"} label={paymentUrl ? "Checkout session ready" : "Ready for payment"} /></div>
             <TripLine label="Outbound" trip={q.outbound} />
             <SeatRows rows={q.outboundBreakdown} />
             {q.returnTrip ? (
@@ -158,19 +161,18 @@ export default function Checkout() {
               Only the traveling member's own regular seat qualifies for $100. Front passenger seats are always $200.
               Promo codes are entered on Stripe. Metro Pro never stores card numbers.
             </p>
-          </div>
+          </section>
         ) : null}
-        <Link href={`/book?out=${outId}&pax=${pax}${retId ? `&ret=${retId}` : ""}${draft.search ? `&search=${encodeURIComponent(draft.search)}` : ""}`} className="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-primary underline">Back to passenger details</Link>
-        <Button className="mt-3 h-12 w-full text-base" onClick={pay} disabled={!q || checkout.isPending || Boolean(paymentUrl)}>
+        <ActionLink href={`/book?out=${outId}&pax=${pax}${retId ? `&ret=${retId}` : ""}${draft.search ? `&search=${encodeURIComponent(draft.search)}` : ""}`} back className="mt-5">Back to passenger details</ActionLink>
+        <Button className="mt-3 min-h-12 w-full text-base" onClick={pay} disabled={!q || checkout.isPending || Boolean(paymentUrl)}>
           {checkout.isPending ? "Holding your selected seats…" : paymentUrl ? "Secure checkout session ready" : "Proceed to secure Stripe payment"}
         </Button>
         {paymentUrl ? (
-          <div className="mt-4 rounded-xl border border-primary/20 bg-secondary p-4 text-sm">
-            <a href={paymentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center font-semibold text-primary underline">Open or resume secure Stripe Checkout</a>.
-            {privateLink ? <p className="mt-2">After payment, <Link href={privateLink} className="font-semibold text-primary underline">check your booking</Link>{active?.guestAccessToken || !active ? " and save its private guest link" : ""}. A return to the app is not proof of payment until the ticket appears.</p> : null}
-          </div>
+          <StatusNotice tone="pending" className="mt-4"><div className="flex flex-wrap items-center gap-2"><StatusBadge status="pending_payment" label="Payment pending" /><a href={paymentUrl} target="_blank" rel="noopener noreferrer" className="metro-action-link">Open or resume secure Stripe Checkout</a></div>
+            {privateLink ? <p className="mt-3">After payment, <Link href={privateLink} className="font-semibold underline underline-offset-4">check your booking</Link>{active?.guestAccessToken || !active ? " and save its private guest link" : ""}. A return to the app is not proof of payment until the ticket appears.</p> : null}
+          </StatusNotice>
         ) : null}
-      </div>
+      </main>
     </PageShell>
   );
 }
@@ -197,10 +199,10 @@ function TripLine({ label, trip }: {
 }) {
   return (
     <div>
-      <div className="text-xs font-semibold uppercase tracking-wider text-accent">{label}</div>
+      <div className="metro-eyebrow mb-1">{label}</div>
       <div className="font-medium">{trip.origin?.name} → {trip.destination?.name}</div>
       <div className="text-sm text-muted-foreground">{formatDate(trip.departAt)} · {formatTime(trip.departAt)} → {formatTime(trip.arriveAt)}</div>
-      <div className="text-xs text-muted-foreground">Pickup {trip.pickup?.label ?? trip.origin?.name} · Drop-off {trip.dropoff?.label ?? trip.destination?.name}</div>
+      <div className="text-xs leading-relaxed text-muted-foreground">Pickup {trip.pickup?.label ?? trip.origin?.name} · Drop-off {trip.dropoff?.label ?? trip.destination?.name}</div>
     </div>
   );
 }

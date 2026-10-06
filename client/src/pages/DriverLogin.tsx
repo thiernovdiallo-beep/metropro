@@ -1,11 +1,12 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { PageShell } from "@/components/Brand";
+import { ActionLink, PageIntro, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 
 export default function DriverLogin() {
   const { user, loading } = useAuth();
@@ -34,21 +35,20 @@ export default function DriverLogin() {
       setError(cause instanceof Error ? cause.message : "Could not sign in.");
     }
   }
-  return <PageShell><section className="container flex min-h-[60vh] items-center justify-center py-14">
-    <div className="ticket-card w-full max-w-md p-6 sm:p-8">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Assigned crew</p>
-      <h1 className="mt-3 font-serif text-3xl">Driver sign in</h1>
-      <p className="mt-3 text-sm text-muted-foreground">Only drivers invited by Metro Pro operations can access trip manifests and scan passenger tickets.</p>
-      {user && user.role !== "driver" && user.role !== "admin" ? <p className="mt-4 rounded-lg bg-secondary p-3 text-sm">This account has no driver access. Sign in with the driver account your administrator created.</p> : null}
-      {window.location.search.includes("setup=complete") ? <p role="status" className="mt-4 rounded-lg bg-secondary p-3 text-sm">Password saved. Sign in to view your assignments.</p> : null}
-      <form onSubmit={submit} className="mt-6 grid gap-4">
-        <div className="form-field"><Label htmlFor="driver-email">Driver email</Label><Input id="driver-email" type="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)} className="h-12 bg-white" /></div>
-        <div className="form-field"><Label htmlFor="driver-password">Password</Label><Input id="driver-password" type="password" autoComplete="current-password" required value={password} onChange={event => setPassword(event.target.value)} className="h-12 bg-white" /></div>
-        {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+  return <PageShell><section className="metro-page metro-page--readable flex min-h-[60vh] items-center">
+    <div className="mx-auto w-full max-w-lg"><PageIntro eyebrow="Assigned crew" title="Driver sign in" description="Only drivers invited by Metro Pro operations can access trip manifests and scan passenger tickets." />
+      <div className="ticket-card p-5 sm:p-7">
+      {user && user.role !== "driver" && user.role !== "admin" ? <StatusNotice>This account has no driver access. Sign in with the driver account your administrator created.</StatusNotice> : null}
+      {window.location.search.includes("setup=complete") ? <StatusNotice tone="success" className={user && user.role !== "driver" && user.role !== "admin" ? "mt-4" : undefined}>Password saved. Sign in to view your assignments.</StatusNotice> : null}
+      <form onSubmit={submit} className="mt-5 grid gap-4">
+        <div className="form-field"><Label className="metro-form-label" htmlFor="driver-email">Driver email</Label><Input id="driver-email" type="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)} className="metro-control" /></div>
+        <div className="form-field"><Label className="metro-form-label" htmlFor="driver-password">Password</Label><Input id="driver-password" type="password" autoComplete="current-password" required value={password} onChange={event => setPassword(event.target.value)} className="metro-control" /></div>
+        {error ? <StatusNotice tone="error">{error}</StatusNotice> : null}
         <Button className="min-h-12 w-full" disabled={signIn.isPending || loading}>{signIn.isPending ? "Signing in…" : "Open driver portal"}</Button>
       </form>
-      <p className="mt-5 text-xs text-muted-foreground">Need an account or a new setup link? Ask your administrator.</p>
-      <Link href="/" className="mt-3 block min-h-11 py-3 text-sm underline underline-offset-4">Back to booking</Link>
+      <p className="mt-5 text-xs leading-relaxed text-muted-foreground">Need an account or a new setup link? Ask your administrator.</p>
+      <ActionLink href="/" className="mt-4">Back to booking</ActionLink>
+      </div>
     </div>
   </section></PageShell>;
 }

@@ -1,10 +1,11 @@
 import { PageShell } from "@/components/Brand";
+import { ActionLink, PageIntro, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 
 function takeSetupToken() {
   const fragment = window.location.hash;
@@ -40,41 +41,37 @@ export default function AdminSetup() {
 
   return (
     <PageShell>
-      <section className="container flex min-h-[60vh] items-center justify-center py-14">
-        <div className="ticket-card w-full max-w-md p-6 sm:p-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Private staff setup</p>
-          <h1 className="mt-3 font-serif text-3xl">Set your admin password</h1>
-          <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-            This one-time invitation adds password access to the existing administrator account. It does not create another administrator.
-          </p>
+      <section className="metro-page metro-page--readable flex min-h-[60vh] items-center">
+        <div className="mx-auto w-full max-w-lg">
+          <PageIntro eyebrow="Private staff setup" title="Set your admin password" description="This one-time invitation adds password access to the existing administrator account. It does not create another administrator." />
+          <div className="ticket-card p-5 sm:p-7">
           {!token ? (
-            <p role="alert" className="mt-6 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
+            <StatusNotice tone="error">
               Open the complete private link from the Manus project-owner notification. It expires after 24 hours and works only once.
-            </p>
+            </StatusNotice>
           ) : (
-            <form onSubmit={submit} className="mt-6 grid gap-4">
+            <form onSubmit={submit} className="grid gap-4">
               <div className="form-field">
-                <Label htmlFor="new-admin-password">New password</Label>
+                <Label className="metro-form-label" htmlFor="new-admin-password">New password</Label>
                 <Input id="new-admin-password" type="password" autoComplete="new-password" minLength={12} maxLength={128}
-                  className="h-12 bg-white" required value={password} onChange={event => setPassword(event.target.value)} />
+                  className="metro-control" required value={password} onChange={event => setPassword(event.target.value)} />
               </div>
               <div className="form-field">
-                <Label htmlFor="confirm-admin-password">Confirm password</Label>
+                <Label className="metro-form-label" htmlFor="confirm-admin-password">Confirm password</Label>
                 <Input id="confirm-admin-password" type="password" autoComplete="new-password" minLength={12} maxLength={128}
-                  className="h-12 bg-white" required value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} />
+                  className="metro-control" required value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} />
               </div>
               <p className="text-xs leading-relaxed text-muted-foreground">
                 Use a unique passphrase of at least 12 characters. Do not share it in messages or reuse your member password.
               </p>
-              {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+              {error ? <StatusNotice tone="error">{error}</StatusNotice> : null}
               <Button type="submit" className="min-h-12 w-full" disabled={setup.isPending}>
                 {setup.isPending ? "Saving password…" : "Set admin password"}
               </Button>
             </form>
           )}
-          <Link href="/admin/login" className="mt-5 block min-h-11 py-3 text-sm text-muted-foreground underline hover:text-primary">
-            Return to admin sign in
-          </Link>
+          <ActionLink href="/admin/login" className="mt-5">Return to admin sign in</ActionLink>
+          </div>
         </div>
       </section>
     </PageShell>

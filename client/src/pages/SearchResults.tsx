@@ -1,4 +1,5 @@
 import { PageShell } from "@/components/Brand";
+import { BookingProgress, PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDate, formatTime, isoDate, money } from "@/lib/format";
@@ -81,40 +82,37 @@ export default function SearchResults() {
     setLocation(`/trip?${q}`);
   }
 
-  return <PageShell><main className="container py-8 sm:py-12">
-    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Find your departure</p>
-    <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
-      <div><h1 className="font-serif text-3xl sm:text-4xl">{cityName(origin)} → {cityName(dest)}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{date ? formatDate(date) : "Choose a date"} · {pax} passenger{pax === 1 ? "" : "s"}{type === "round_trip" && returnDate ? ` · Return ${formatDate(returnDate)}` : ""}</p>
-      </div>
-      <Button variant="outline" className="min-h-11" onClick={() => setEditing(value => !value)} aria-expanded={editing} aria-controls="modify-search">Modify search</Button>
-    </div>
-    {editing ? <form id="modify-search" className="ticket-card mt-5 grid min-w-0 gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4" onSubmit={event => {
+  return <PageShell><main className="metro-page metro-page--wide">
+    <BookingProgress current="Search" />
+    <PageIntro eyebrow="Find your departure" title={`${cityName(origin)} → ${cityName(dest)}`}
+      description={<>{date ? formatDate(date) : "Choose a date"} · {pax} passenger{pax === 1 ? "" : "s"}{type === "round_trip" && returnDate ? ` · Return ${formatDate(returnDate)}` : ""}</>}
+      actions={<Button variant="outline" className="min-h-11" onClick={() => setEditing(value => !value)} aria-expanded={editing} aria-controls="modify-search">Modify search</Button>} />
+    {editing ? <form id="modify-search" className="ticket-card grid min-w-0 gap-4 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-4" onSubmit={event => {
       event.preventDefault();
       if (!destinations.some(route => route.destinationCityId === to) || !travelDate || travelers < 1 || travelers > 12 || (tripType === "round_trip" && (!backDate || backDate < travelDate))) return;
       setLocation(searchUrl({ origin: from, dest: to, date: travelDate, pax: travelers, type: tripType, returnDate: backDate }));
       setEditing(false);
     }}>
-      <label className="grid gap-1 text-sm font-semibold">Departure<select className="h-12 rounded-md border border-input bg-white px-3" value={from} onChange={event => { const id = Number(event.target.value); setFrom(id); setTo(routeOptions.find(route => route.originCityId === id)?.destinationCityId ?? 0); }}>
+      <label className="grid min-w-0 gap-2"><span className="metro-form-label">Departure</span><select className="metro-control" value={from} onChange={event => { const id = Number(event.target.value); setFrom(id); setTo(routeOptions.find(route => route.originCityId === id)?.destinationCityId ?? 0); }}>
         {origins.map(([id, city]) => <option key={id} value={id}>{city?.name}</option>)}
       </select></label>
-      <label className="grid gap-1 text-sm font-semibold">Destination<select className="h-12 rounded-md border border-input bg-white px-3" value={to} onChange={event => setTo(Number(event.target.value))}>
+      <label className="grid min-w-0 gap-2"><span className="metro-form-label">Destination</span><select className="metro-control" value={to} onChange={event => setTo(Number(event.target.value))}>
         {destinations.map(route => <option key={route.id} value={route.destinationCityId}>{route.destination?.name}</option>)}
       </select></label>
-      <label className="grid gap-1 text-sm font-semibold">Departure date<Input className="h-12" type="date" min={isoDate()} value={travelDate} onChange={event => setTravelDate(event.target.value)} required /></label>
-      <label className="grid gap-1 text-sm font-semibold">Passengers<Input className="h-12" type="number" min={1} max={12} value={travelers} onChange={event => setTravelers(Number(event.target.value))} required /></label>
-      <label className="grid gap-1 text-sm font-semibold">Trip type<select className="h-12 rounded-md border border-input bg-white px-3" value={tripType} onChange={event => setTripType(event.target.value as "one_way" | "round_trip")}><option value="one_way">One way</option><option value="round_trip">Round trip</option></select></label>
-      {tripType === "round_trip" ? <label className="grid gap-1 text-sm font-semibold">Return date<Input className="h-12" type="date" min={travelDate || isoDate()} value={backDate} onChange={event => setBackDate(event.target.value)} required /></label> : null}
+      <label className="grid min-w-0 gap-2"><span className="metro-form-label">Departure date</span><Input className="metro-control" type="date" min={isoDate()} value={travelDate} onChange={event => setTravelDate(event.target.value)} required /></label>
+      <label className="grid min-w-0 gap-2"><span className="metro-form-label">Passengers</span><Input className="metro-control" type="number" min={1} max={12} value={travelers} onChange={event => setTravelers(Number(event.target.value))} required /></label>
+      <label className="grid min-w-0 gap-2"><span className="metro-form-label">Trip type</span><select className="metro-control" value={tripType} onChange={event => setTripType(event.target.value as "one_way" | "round_trip")}><option value="one_way">One way</option><option value="round_trip">Round trip</option></select></label>
+      {tripType === "round_trip" ? <label className="grid min-w-0 gap-2"><span className="metro-form-label">Return date</span><Input className="metro-control" type="date" min={travelDate || isoDate()} value={backDate} onChange={event => setBackDate(event.target.value)} required /></label> : null}
       <Button type="submit" className="min-h-12 self-end">Update results</Button>
     </form> : null}
-    {!valid ? <div role="alert" className="ticket-card mt-8 p-6">This search is incomplete. <Link href="/" className="font-semibold text-primary underline">Start a new search</Link>.</div> : null}
+    {!valid ? <StatusNotice tone="error" className="mt-7">This search is incomplete. <Link href="/" className="font-semibold underline underline-offset-4">Start a new search</Link>.</StatusNotice> : null}
     {valid ? <>
       <ResultLeg label="Outbound" date={date} data={outbound.data} loading={outbound.isLoading} error={outbound.error?.message} retry={() => void outbound.refetch()} selectedId={outId} pax={pax} onSelect={id => { setOutId(id); setInId(null); if (type === "one_way") chooseTrip(id, null); }} direct={type === "one_way"} onModify={() => setEditing(true)} />
-      {type === "round_trip" && !selectedOutbound ? <p className="ticket-card mt-6 p-5 text-sm text-muted-foreground">Choose an outbound departure first to see valid returns after its arrival.</p> : null}
+      {type === "round_trip" && !selectedOutbound ? <StatusNotice tone="info" className="mt-6">Choose an outbound departure first to see valid returns after its arrival.</StatusNotice> : null}
       {type === "round_trip" && selectedOutbound ? <ResultLeg label="Return" date={returnDate ?? ""} data={eligibleReturns} loading={inbound.isLoading} error={inbound.error?.message} retry={() => void inbound.refetch()} selectedId={inId} pax={pax} onSelect={setInId} onModify={() => setEditing(true)} /> : null}
-      {type === "round_trip" ? <div className="ticket-card mt-8 flex flex-wrap items-center justify-between gap-3 p-5">
-        <p className="text-sm">{selectedOutbound ? `Outbound ${formatTime(selectedOutbound.departAt)}` : "Choose an outbound trip"} · {selectedReturn ? `Return ${formatTime(selectedReturn.departAt)}` : "Choose a return trip"}</p>
-        <Button className="min-h-12" disabled={!selectedOutbound || !selectedReturn} onClick={() => chooseTrip(outId!, inId!)}>Review selected trips</Button>
+      {type === "round_trip" ? <div className="ticket-card mt-8 flex flex-wrap items-center justify-between gap-4 p-5 sm:p-6">
+        <p className="min-w-0 text-sm">{selectedOutbound ? `Outbound ${formatTime(selectedOutbound.departAt)}` : "Choose an outbound trip"} · {selectedReturn ? `Return ${formatTime(selectedReturn.departAt)}` : "Choose a return trip"}</p>
+        <Button className="min-h-12 shrink-0" disabled={!selectedOutbound || !selectedReturn} onClick={() => chooseTrip(outId!, inId!)}>Review selected trips</Button>
       </div> : null}
     </> : null}
   </main></PageShell>;
@@ -125,16 +123,19 @@ function ResultLeg({ label, date, data, loading, error, retry, selectedId, pax, 
   selectedId: number | null; pax: number; onSelect: (id: number) => void; direct?: boolean; onModify: () => void;
 }) {
   return <section className="mt-9" aria-label={`${label} departures`}>
-    <h2 className="font-serif text-2xl">{label} · {formatDate(date)}</h2>
-    {loading ? <p role="status" className="mt-4 text-sm text-muted-foreground">Checking live trips and seats…</p> : null}
-    {error ? <div role="alert" className="ticket-card mt-4 p-5 text-sm">Trips could not be loaded. <button className="font-semibold text-primary underline" onClick={retry}>Try again</button>.</div> : null}
-    {!loading && !error && data?.length === 0 ? <div className="ticket-card mt-4 p-6"><p className="font-semibold">No trips available for this date.</p><p className="mt-2 text-sm text-muted-foreground">Choose a different date or change your route.</p><div className="mt-4 flex flex-wrap gap-2"><Button variant="outline" className="min-h-11" onClick={onModify}>Change date</Button><Button variant="outline" className="min-h-11" onClick={onModify}>Modify search</Button></div></div> : null}
-    <div className="mt-4 grid gap-4">{(data ?? []).map(trip => <article key={trip.id} className={`ticket-card grid gap-4 p-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center ${selectedId === trip.id ? "ring-2 ring-accent" : ""}`}>
-      <div className="min-w-0"><div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"><span className="font-semibold text-primary">{trip.origin?.name} → {trip.destination?.name}</span><span className="text-muted-foreground">{trip.vehicleCode ? `Service ${trip.vehicleCode}` : "Vehicle assignment pending"}</span></div>
-        <div className="mt-3 flex flex-wrap items-center gap-3"><div><strong className="font-serif text-2xl">{formatTime(trip.departAt)}</strong><p className="text-xs text-muted-foreground">{trip.pickup?.label ?? trip.origin?.name}</p></div><span aria-hidden="true" className="text-lg text-accent">→</span><div><strong className="font-serif text-2xl">{formatTime(trip.arriveAt)}</strong><p className="text-xs text-muted-foreground">{trip.dropoff?.label ?? trip.destination?.name}</p></div><span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold">{tripDuration(trip.departAt, trip.arriveAt)}</span></div>
-        <p className="mt-3 text-xs text-muted-foreground">Available seats: {trip.seatsRemaining} · {trip.standardSeatsRemaining} regular · {trip.frontSeatAvailable ? "1 front" : "front occupied"}{trip.memberEarlyAccess ? " · Member early access" : ""}</p>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 md:flex-col md:items-end"><div className="md:text-right"><p className="text-xs uppercase tracking-wider text-muted-foreground">From</p><p className="price-copper text-2xl font-semibold">{money(trip.standardSeatsRemaining ? trip.standardFareCents : trip.frontFareCents)}</p><p className="text-xs text-muted-foreground">Regular {money(trip.standardFareCents)} · Front {money(trip.frontFareCents)}</p></div><Button type="button" className="min-h-11 min-w-36" disabled={trip.soldOut || trip.seatsRemaining < pax} variant={selectedId === trip.id ? "secondary" : "default"} onClick={() => onSelect(trip.id)}>{trip.soldOut ? trip.memberEarlyAccess ? "Members first" : "Sold out" : selectedId === trip.id ? "Selected" : direct ? "Select seats" : `Select ${label.toLowerCase()}`}</Button></div>
-    </article>)}</div>
+    <div className="flex flex-wrap items-end justify-between gap-3"><h2 className="metro-section-title">{label} · {formatDate(date)}</h2><p className="text-sm text-muted-foreground">Live seat availability</p></div>
+    <div className="mt-4">
+      <ResourceState loading={loading} error={error ? "Trips could not be loaded." : null} onRetry={retry}>
+        {data?.length === 0 ? <div className="ticket-card p-6 sm:p-7"><p className="font-semibold">No trips available for this date.</p><p className="mt-2 text-sm leading-relaxed text-muted-foreground">Choose a different date or change your route.</p><div className="mt-4 flex flex-wrap gap-2"><Button variant="outline" className="min-h-11" onClick={onModify}>Change date</Button><Button variant="outline" className="min-h-11" onClick={onModify}>Modify search</Button></div></div> : null}
+        <div className="grid gap-4">{(data ?? []).map(trip => <article key={trip.id} className={`ticket-card grid gap-5 p-5 sm:p-6 md:grid-cols-[minmax(0,1fr)_auto] md:items-center ${selectedId === trip.id ? "ring-2 ring-primary ring-offset-2" : ""}`}>
+          <div className="min-w-0"><div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm"><span className="font-semibold text-primary">{trip.origin?.name} → {trip.destination?.name}</span><span className="text-muted-foreground">{trip.vehicleCode ? `Service ${trip.vehicleCode}` : "Vehicle assignment pending"}</span>{selectedId === trip.id ? <StatusBadge status="active" label="Selected" /> : null}</div>
+            <div className="mt-3 flex flex-wrap items-center gap-3"><div><strong className="font-serif text-2xl">{formatTime(trip.departAt)}</strong><p className="text-xs text-muted-foreground">{trip.pickup?.label ?? trip.origin?.name}</p></div><span aria-hidden="true" className="text-lg text-primary">→</span><div><strong className="font-serif text-2xl">{formatTime(trip.arriveAt)}</strong><p className="text-xs text-muted-foreground">{trip.dropoff?.label ?? trip.destination?.name}</p></div><span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-primary">{tripDuration(trip.departAt, trip.arriveAt)}</span></div>
+            <div className="mt-4 flex flex-wrap items-center gap-2"><StatusBadge status={trip.soldOut ? "canceled" : trip.seatsRemaining < pax ? "pending" : "available"} label={trip.soldOut ? (trip.memberEarlyAccess ? "Members first" : "Sold out") : trip.seatsRemaining < pax ? "Not enough seats for your group" : `${trip.seatsRemaining} seats available`} />{trip.memberEarlyAccess && !trip.soldOut ? <StatusBadge status="pending" label="Member early access" /> : null}</div>
+            <p className="mt-2 text-xs text-muted-foreground">{trip.standardSeatsRemaining} regular · {trip.frontSeatAvailable ? "1 front seat available" : "front seat occupied"}</p>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 md:flex-col md:items-end"><div className="md:text-right"><p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">From</p><p className="price-copper text-2xl font-semibold">{money(trip.standardSeatsRemaining ? trip.standardFareCents : trip.frontFareCents)}</p><p className="text-xs text-muted-foreground">Regular {money(trip.standardFareCents)} · Front {money(trip.frontFareCents)}</p></div><Button type="button" className="min-h-11 min-w-36" disabled={trip.soldOut || trip.seatsRemaining < pax} variant={selectedId === trip.id ? "secondary" : "default"} onClick={() => onSelect(trip.id)}>{trip.soldOut ? trip.memberEarlyAccess ? "Members first" : "Sold out" : selectedId === trip.id ? "Selected" : direct ? "Select seats" : `Select ${label.toLowerCase()}`}</Button></div>
+        </article>)}</div>
+      </ResourceState>
+    </div>
   </section>;
 }

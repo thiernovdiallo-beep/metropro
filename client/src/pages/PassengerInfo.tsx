@@ -1,4 +1,5 @@
 import { PageShell } from "@/components/Brand";
+import { ActionLink, BookingProgress, PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import SeatMap from "@/components/SeatMap";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -125,56 +126,49 @@ export default function PassengerInfo() {
   const standard = settings.data?.standardFareCents ?? 15000;
   const member = settings.data?.memberFareCents ?? 10000;
   const front = settings.data?.frontFareCents ?? 20000;
+  const seatMapLoading = outMap.isLoading || (roundTrip && retMap.isLoading);
 
   return (
     <PageShell>
-      <div className="container max-w-2xl py-10">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Your trip · Step 4</p>
-        <h1 className="mt-2 font-serif text-3xl">Passenger details</h1>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          Choose each traveler's available seat ({money(standard)} regular or {money(front)} front on this route).
-          The traveling member pays {money(member)} for their own regular seat; the front seat is always {money(front)}.
-        </p>
-        {fromSeatPage ? <Link href={`/seats?${params}`} className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-primary underline">Back to seats</Link> : null}
+      <main className="metro-page metro-page--readable">
+        <BookingProgress current="Travelers" />
+        <PageIntro eyebrow="Your trip · Step 4" title="Passenger details" description={<>Choose each traveler's available seat ({money(standard)} regular or {money(front)} front on this route). The traveling member pays {money(member)} for their own regular seat; the front seat is always {money(front)}.</>} />
+        {fromSeatPage ? <ActionLink href={`/seats?${params}`} back className="mb-5">Back to seats</ActionLink> : null}
         {!isAuthenticated ? (
-          <div className="mt-6 rounded-xl border border-primary/20 bg-secondary p-4 text-sm">
-            <strong>Booking as a guest.</strong> No sign-in or ID photo is needed. Enter your contact details and save your private ticket link after payment.
-            <a href="/#member-sign-in" className="ml-1 font-semibold text-primary underline">Member sign in</a>
-          </div>
+          <StatusNotice tone="info" className="mb-6"><strong>Booking as a guest.</strong> No sign-in or ID photo is needed. Enter your contact details and save your private ticket link after payment. <a href="/#member-sign-in" className="font-semibold underline underline-offset-4">Member sign in</a></StatusNotice>
         ) : overview.data?.membership && !overview.data.memberFareEligible ? (
-          <div className="mt-6 rounded-xl border border-primary/20 bg-secondary p-4 text-sm">
-            Your paid membership requires a completed name, email, phone and ID photo for the member fare.
-            <Link href="/account/settings" className="ml-1 font-semibold text-primary underline">Finish your profile</Link>
-          </div>
+          <StatusNotice tone="pending" className="mb-6">Your paid membership requires a completed name, email, phone and ID photo for the member fare. <Link href="/account/settings" className="font-semibold underline underline-offset-4">Finish your profile</Link></StatusNotice>
         ) : null}
-        <form className="mt-7 grid min-w-0 gap-7" onSubmit={go}>
-          <section className="ticket-card grid min-w-0 gap-4 p-5 sm:grid-cols-2 sm:p-6" aria-label="Contact information">
+        {outMap.error || retMap.error ? <StatusNotice tone="error" className="mb-6">Seat availability could not be refreshed. Return to the previous step and choose your seats again.</StatusNotice> : null}
+        {seatMapLoading ? <div className="mb-6"><ResourceState loading>Loading live seat availability…</ResourceState></div> : null}
+        <form className="grid min-w-0 gap-7" onSubmit={go}>
+          <section className="ticket-card grid min-w-0 gap-5 p-5 sm:grid-cols-2 sm:p-6" aria-label="Contact information">
             <h2 className="font-serif text-xl sm:col-span-2">Contact details</h2>
             <div className="form-field">
-              <Label htmlFor="contact-first">First name</Label>
-              <Input id="contact-first" className="h-12 bg-white" value={contactFirstName} onChange={e => setFirst(e.target.value)} required />
+              <Label className="metro-form-label" htmlFor="contact-first">First name</Label>
+              <Input id="contact-first" className="metro-control" value={contactFirstName} onChange={e => setFirst(e.target.value)} required />
             </div>
             <div className="form-field">
-              <Label htmlFor="contact-last">Last name</Label>
-              <Input id="contact-last" className="h-12 bg-white" value={contactLastName} onChange={e => setLast(e.target.value)} required />
+              <Label className="metro-form-label" htmlFor="contact-last">Last name</Label>
+              <Input id="contact-last" className="metro-control" value={contactLastName} onChange={e => setLast(e.target.value)} required />
             </div>
             <div className="form-field">
-              <Label htmlFor="contact-phone">Phone</Label>
-              <Input id="contact-phone" type="tel" className="h-12 bg-white" value={phone} onChange={e => setPhone(e.target.value)} required />
+              <Label className="metro-form-label" htmlFor="contact-phone">Phone</Label>
+              <Input id="contact-phone" type="tel" className="metro-control" value={phone} onChange={e => setPhone(e.target.value)} required />
             </div>
             <div className="form-field">
-              <Label htmlFor="contact-email">Email</Label>
-              <Input id="contact-email" type="email" className="h-12 bg-white" value={email} onChange={e => setEmail(e.target.value)} required />
+              <Label className="metro-form-label" htmlFor="contact-email">Email</Label>
+              <Input id="contact-email" type="email" className="metro-control" value={email} onChange={e => setEmail(e.target.value)} required />
             </div>
             {settings.data?.emergencyContactRequired ? (
               <>
                 <div className="form-field">
-                  <Label htmlFor="emergency-name">Emergency contact name</Label>
-                  <Input id="emergency-name" className="h-12 bg-white" value={emergencyName} onChange={e => setEmName(e.target.value)} required />
+                  <Label className="metro-form-label" htmlFor="emergency-name">Emergency contact name</Label>
+                  <Input id="emergency-name" className="metro-control" value={emergencyName} onChange={e => setEmName(e.target.value)} required />
                 </div>
                 <div className="form-field">
-                  <Label htmlFor="emergency-phone">Emergency contact phone</Label>
-                  <Input id="emergency-phone" type="tel" className="h-12 bg-white" value={emergencyPhone} onChange={e => setEmPhone(e.target.value)} required />
+                  <Label className="metro-form-label" htmlFor="emergency-phone">Emergency contact phone</Label>
+                  <Input id="emergency-phone" type="tel" className="metro-control" value={emergencyPhone} onChange={e => setEmPhone(e.target.value)} required />
                 </div>
               </>
             ) : null}
@@ -182,30 +176,30 @@ export default function PassengerInfo() {
 
           <section className="grid gap-4" aria-label="Passenger details">
             <div>
-              <h2 className="font-serif text-2xl">Your travelers</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Add each traveler's name, then choose a seat for each leg of the trip.</p>
+              <h2 className="metro-section-title">Your travelers</h2>
+              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">Add each traveler's name, then choose a seat for each leg of the trip.</p>
             </div>
             {travelers.map((person, index) => (
               <div key={index} className="ticket-card grid min-w-0 gap-4 p-5 sm:p-6">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="font-serif text-lg">Passenger {index + 1}</h3>
-                  {person.isMemberTraveler ? <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-primary">Traveling member</span> : null}
+                  {person.isMemberTraveler ? <StatusBadge status="active" label="Traveling member" /> : <StatusBadge status="pending" label="Traveler details needed" />}
                 </div>
                 <div className="grid min-w-0 gap-4 sm:grid-cols-2">
                   <div className="form-field">
-                    <Label htmlFor={`passenger-${index}-first`}>First name</Label>
-                    <Input id={`passenger-${index}-first`} className="h-12 bg-white" value={person.firstName} onChange={e => updateTraveler(index, { firstName: e.target.value })} required />
+                    <Label className="metro-form-label" htmlFor={`passenger-${index}-first`}>First name</Label>
+                    <Input id={`passenger-${index}-first`} className="metro-control" value={person.firstName} onChange={e => updateTraveler(index, { firstName: e.target.value })} required />
                   </div>
                   <div className="form-field">
-                    <Label htmlFor={`passenger-${index}-last`}>Last name</Label>
-                    <Input id={`passenger-${index}-last`} className="h-12 bg-white" value={person.lastName} onChange={e => updateTraveler(index, { lastName: e.target.value })} required />
+                    <Label className="metro-form-label" htmlFor={`passenger-${index}-last`}>Last name</Label>
+                    <Input id={`passenger-${index}-last`} className="metro-control" value={person.lastName} onChange={e => updateTraveler(index, { lastName: e.target.value })} required />
                   </div>
                 </div>
                 {person.seatNumber || person.returnSeatNumber ? (
                   <p className="text-sm text-muted-foreground">Outbound: {person.seatNumber ?? "not selected"}{roundTrip ? ` · Return: ${person.returnSeatNumber ?? "not selected"}` : ""}</p>
                 ) : null}
                 {hasMembership ? (
-                  <label className="flex items-start gap-3 rounded-lg bg-secondary/70 p-3 text-sm leading-relaxed">
+                  <label className="flex items-start gap-3 rounded-xl bg-secondary/70 p-3 text-sm leading-relaxed">
                     <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-[#137a86]" checked={person.isMemberTraveler}
                       disabled={!person.isMemberTraveler && travelers.some(traveler => traveler.isMemberTraveler)}
                       onChange={e => updateTraveler(index, { isMemberTraveler: e.target.checked })} />
@@ -215,7 +209,7 @@ export default function PassengerInfo() {
                 {saved.data?.length ? (
                   <div className="flex flex-wrap gap-2">
                     {saved.data.map(passenger => (
-                      <button type="button" key={passenger.id} className="rounded-full border border-border bg-white px-3 py-1.5 text-xs hover:border-primary"
+                      <button type="button" key={passenger.id} className="min-h-11 rounded-full border border-border bg-white px-3 py-1.5 text-xs font-semibold hover:border-primary hover:bg-secondary"
                         onClick={() => applySaved(index, passenger.firstName, passenger.lastName)}>{passenger.firstName} {passenger.lastName}</button>
                     ))}
                   </div>
@@ -224,45 +218,41 @@ export default function PassengerInfo() {
             ))}
           </section>
           {namesReady && !fromSeatPage ? (
-            <div className="grid min-w-0 gap-6" aria-label="Select seats">
+            <section className="grid min-w-0 gap-6" aria-label="Select seats">
               <div>
-                <h2 className="font-serif text-2xl">Choose your seats</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Select seats in passenger order. Each leg has its own seat choices; no seat is reserved until checkout.</p>
+                <h2 className="metro-section-title">Choose your seats</h2>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">Select seats in passenger order. Each leg has its own seat choices; no seat is reserved until checkout.</p>
               </div>
               <div aria-label="Outbound seating">
-                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-primary">Outbound departure</h3>
-                <SeatMap departureId={outId} passengerCount={pax} selectedSeats={outboundNumbers}
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="metro-form-label">Outbound departure</h3><StatusBadge status={outwardFits ? "available" : "pending"} label={outwardFits ? "Seats selected" : "Choose seats"} /></div>
+                <SeatMap departureId={outId} passengerCount={pax} selectedSeats={outboundNumbers} showHeading={false} label="Outbound seat map"
                   onSeatSelect={selectOutbound} onSeatDeselect={deselectOutbound} />
               </div>
               {roundTrip ? (
                 <div aria-label="Return seating">
-                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-primary">Return departure</h3>
-                  <SeatMap departureId={retId} passengerCount={pax} selectedSeats={returnNumbers}
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="metro-form-label">Return departure</h3><StatusBadge status={returnFits ? "available" : "pending"} label={returnFits ? "Seats selected" : "Choose seats"} /></div>
+                  <SeatMap departureId={retId} passengerCount={pax} selectedSeats={returnNumbers} showHeading={false} label="Return seat map"
                     onSeatSelect={selectReturn} onSeatDeselect={deselectReturn} />
                 </div>
               ) : null}
-            </div>
+            </section>
           ) : !fromSeatPage ? (
-            <p className="rounded-xl bg-muted p-4 text-sm text-muted-foreground">Enter each passenger's first and last name to open the seat map.</p>
+            <StatusNotice tone="info">Enter each passenger's first and last name to open the seat map.</StatusNotice>
           ) : null}
           {hasMembership && !chosenMember ? (
-            <p className="rounded-xl bg-secondary p-4 text-sm">The member fare applies only when you select yourself as one of the travelers.</p>
+            <StatusNotice tone="info">The member fare applies only when you select yourself as one of the travelers.</StatusNotice>
           ) : null}
           {!memberNameMatches ? (
-            <p role="alert" className="rounded-xl border border-destructive/30 bg-red-50 p-4 text-sm text-destructive">
-              The selected member passenger must match your profile name ({user?.name ?? "not set"}). <Link href="/account/settings" className="underline">Update your profile</Link> if needed.
-            </p>
+            <StatusNotice tone="error">The selected member passenger must match your profile name ({user?.name ?? "not set"}). <Link href="/account/settings" className="font-semibold underline underline-offset-4">Update your profile</Link> if needed.</StatusNotice>
           ) : null}
           {namesReady && seatsReady && (!outwardFits || !returnFits) ? (
-            <p role="status" className="rounded-xl border border-primary/20 bg-secondary p-4 text-sm">
-              Select one available seat per passenger{roundTrip ? " on both departures" : ""}. If a seat was just taken or held, choose another.
-            </p>
+            <StatusNotice tone="pending">Select one available seat per passenger{roundTrip ? " on both departures" : ""}. If a seat was just taken or held, choose another.</StatusNotice>
           ) : null}
-          <Button type="submit" className="h-12 w-full text-base" disabled={!namesReady || !seatsReady || !outwardFits || !returnFits || !memberNameMatches}>
+          <Button type="submit" className="min-h-12 w-full text-base" disabled={!namesReady || !seatsReady || !outwardFits || !returnFits || !memberNameMatches}>
             Review booking and total
           </Button>
         </form>
-      </div>
+      </main>
     </PageShell>
   );
 }

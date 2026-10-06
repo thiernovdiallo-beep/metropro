@@ -1,4 +1,5 @@
 import { PageShell } from "@/components/Brand";
+import { ActionLink, PageIntro, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -6,7 +7,7 @@ import { ADMIN_LOGIN_INTENT_KEY, startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 
 export default function AdminLogin() {
   const { user, loading, logout } = useAuth();
@@ -61,48 +62,44 @@ export default function AdminLogin() {
 
   return (
     <PageShell>
-      <section className="container flex min-h-[60vh] items-center justify-center py-14">
-        <div className="ticket-card w-full max-w-md p-6 sm:p-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Staff access</p>
-          <h1 className="mt-3 font-serif text-3xl">Admin sign in</h1>
-          <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-            Sign in to the existing authorized administrator account. This form cannot create or grant administrator access.
-          </p>
+      <section className="metro-page metro-page--readable flex min-h-[60vh] items-center">
+        <div className="mx-auto w-full max-w-lg">
+          <PageIntro eyebrow="Staff access" title="Admin sign in" description="Sign in to the existing authorized administrator account. This form cannot create or grant administrator access." />
+          <div className="ticket-card p-5 sm:p-7">
           {user && user.role !== "admin" ? (
-            <p className="mt-5 rounded-lg border border-border bg-secondary px-4 py-3 text-sm">
+            <StatusNotice>
               Your current account does not have admin access. Enter the administrator account credentials to switch accounts.
-            </p>
+            </StatusNotice>
           ) : null}
           {window.location.search.includes("setup=complete") ? (
-            <p role="status" className="mt-5 rounded-lg border border-primary/25 bg-primary/5 px-4 py-3 text-sm">
+            <StatusNotice tone="success" className={user && user.role !== "admin" ? "mt-4" : undefined}>
               Admin password saved. You can sign in now.
-            </p>
+            </StatusNotice>
           ) : null}
-          <form className="mt-6 grid gap-4" onSubmit={submitPassword}>
+          <form className="mt-5 grid gap-4" onSubmit={submitPassword}>
             <div className="form-field">
-              <Label htmlFor="admin-email">Admin email</Label>
+              <Label className="metro-form-label" htmlFor="admin-email">Admin email</Label>
               <Input id="admin-email" type="email" autoComplete="username" required value={email}
-                onChange={event => setEmail(event.target.value)} className="h-12 bg-white" />
+                onChange={event => setEmail(event.target.value)} className="metro-control" />
             </div>
             <div className="form-field">
-              <Label htmlFor="admin-password">Password</Label>
+              <Label className="metro-form-label" htmlFor="admin-password">Password</Label>
               <Input id="admin-password" type="password" autoComplete="current-password" required value={password}
-                onChange={event => setPassword(event.target.value)} className="h-12 bg-white" />
+                onChange={event => setPassword(event.target.value)} className="metro-control" />
             </div>
-            {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+            {error ? <StatusNotice tone="error">{error}</StatusNotice> : null}
             <Button type="submit" className="min-h-12 w-full" disabled={loading || signIn.isPending}>
               {signIn.isPending ? "Signing in…" : "Sign in to operations"}
             </Button>
           </form>
           {!isPreview ? (
             <button type="button" disabled={oauthWorking} onClick={continueWithManus}
-              className="mt-5 min-h-11 text-sm text-muted-foreground underline underline-offset-4 hover:text-primary">
+              className="mt-5 inline-flex min-h-11 items-center text-sm text-muted-foreground underline underline-offset-4 hover:text-primary">
               {oauthWorking ? "Opening Manus sign-in…" : "Use an existing Manus admin session instead"}
             </button>
           ) : null}
-          <Link href="/" className="mt-5 block min-h-11 py-3 text-sm text-muted-foreground underline hover:text-primary">
-            Back to booking
-          </Link>
+          <ActionLink href="/" className="mt-5">Back to booking</ActionLink>
+          </div>
         </div>
       </section>
     </PageShell>

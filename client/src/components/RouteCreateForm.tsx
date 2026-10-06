@@ -1,3 +1,4 @@
+import { StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState, type FormEvent } from "react";
@@ -29,6 +30,7 @@ export default function RouteCreateForm({ cities, locations, onSave, initial }: 
   const dropoffs = locations.filter(location => location.cityId === to);
   const pickup = pickups.some(location => location.id === pickupId) ? pickupId : pickups[0]?.id ?? 0;
   const dropoff = dropoffs.some(location => location.id === dropoffId) ? dropoffId : dropoffs[0]?.id ?? 0;
+  const ready = Boolean(from && to && pickup && dropoff);
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!from || !to || !pickup || !dropoff) {
@@ -38,24 +40,25 @@ export default function RouteCreateForm({ cities, locations, onSave, initial }: 
     onSave({ ...(initial ? { id: initial.id } : {}), originCityId: from, destinationCityId: to, pickupLocationId: pickup, dropoffLocationId: dropoff,
       estimatedMinutes: minutes, standardFareCents: regular, memberFareCents: member, frontFareCents: front, isActive: active });
   }
-  return <form className="ticket-card mt-3 grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4" onSubmit={submit}>
-    <label className="form-field">From<select className="h-10 rounded-md border border-input bg-white px-3" value={from} onChange={event => { setOriginId(Number(event.target.value)); setPickupId(0); setDropoffId(0); }}>
+  return <form className="ticket-card mt-3 grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4" onSubmit={submit}>
+    {!ready ? <StatusNotice tone="pending" className="sm:col-span-2 lg:col-span-4">Add at least two cities and matching pickup and drop-off locations before saving this route.</StatusNotice> : null}
+    <label className="form-field">From<select className="metro-control" value={from} onChange={event => { setOriginId(Number(event.target.value)); setPickupId(0); setDropoffId(0); }}>
       {cities.map(city => <option key={city.id} value={city.id}>{city.name}</option>)}
     </select></label>
-    <label className="form-field">To<select className="h-10 rounded-md border border-input bg-white px-3" value={to} onChange={event => { setDestinationId(Number(event.target.value)); setDropoffId(0); }}>
+    <label className="form-field">To<select className="metro-control" value={to} onChange={event => { setDestinationId(Number(event.target.value)); setDropoffId(0); }}>
       {cities.filter(city => city.id !== from).map(city => <option key={city.id} value={city.id}>{city.name}</option>)}
     </select></label>
-    <label className="form-field">Pickup<select className="h-10 rounded-md border border-input bg-white px-3" value={pickup} onChange={event => setPickupId(Number(event.target.value))}>
+    <label className="form-field">Pickup<select className="metro-control" value={pickup} onChange={event => setPickupId(Number(event.target.value))}>
       {pickups.map(location => <option key={location.id} value={location.id}>{location.label}</option>)}
     </select></label>
-    <label className="form-field">Drop-off<select className="h-10 rounded-md border border-input bg-white px-3" value={dropoff} onChange={event => setDropoffId(Number(event.target.value))}>
+    <label className="form-field">Drop-off<select className="metro-control" value={dropoff} onChange={event => setDropoffId(Number(event.target.value))}>
       {dropoffs.map(location => <option key={location.id} value={location.id}>{location.label}</option>)}
     </select></label>
-    <label className="form-field">Estimated travel minutes<Input required type="number" min={1} max={2880} value={minutes} onChange={event => setMinutes(Number(event.target.value))} /></label>
-    <label className="form-field">Regular fare cents<Input required type="number" min={0} value={regular} onChange={event => setRegular(Number(event.target.value))} /></label>
-    <label className="form-field">Member regular fare cents<Input required type="number" min={0} value={member} onChange={event => setMember(Number(event.target.value))} /></label>
-    <label className="form-field">Front fare cents<Input required type="number" min={0} value={front} onChange={event => setFront(Number(event.target.value))} /></label>
-    {initial ? <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={active} onChange={event => setActive(event.target.checked)} /> Active for sale</label> : null}
-    <Button type="submit" className="min-h-11 sm:col-span-2 lg:col-span-4" disabled={!from || !to || !pickup || !dropoff}>{initial ? "Save route changes" : "Create active route"}</Button>
+    <label className="form-field">Estimated travel minutes<Input className="metro-control" required type="number" min={1} max={2880} value={minutes} onChange={event => setMinutes(Number(event.target.value))} /></label>
+    <label className="form-field">Regular fare cents<Input className="metro-control" required type="number" min={0} value={regular} onChange={event => setRegular(Number(event.target.value))} /></label>
+    <label className="form-field">Member regular fare cents<Input className="metro-control" required type="number" min={0} value={member} onChange={event => setMember(Number(event.target.value))} /></label>
+    <label className="form-field">Front fare cents<Input className="metro-control" required type="number" min={0} value={front} onChange={event => setFront(Number(event.target.value))} /></label>
+    {initial ? <label className="flex min-h-11 items-center gap-3 text-sm font-semibold"><input type="checkbox" checked={active} onChange={event => setActive(event.target.checked)} /> Active for sale</label> : null}
+    <Button type="submit" className="min-h-11 sm:col-span-2 lg:col-span-4" disabled={!ready}>{initial ? "Save route changes" : "Create active route"}</Button>
   </form>;
 }

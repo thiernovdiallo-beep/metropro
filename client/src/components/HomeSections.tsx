@@ -1,4 +1,5 @@
 import React from "react";
+import { ResourceState } from "@/components/MetroUI";
 import { isoDate, money } from "@/lib/format";
 import {
   Armchair, ArrowRight, CalendarDays, CircleHelp, Clock3,
@@ -21,7 +22,9 @@ const CITY_IMAGES: Record<string, string> = {
 };
 const DEFAULT_IMAGE = "/manus-storage/async-images/IhzIbhghbmJ0tnSZuu0a46/image-1.webp";
 
-export function PopularRoutes({ routes, date }: { routes: RouteInfo[]; date: string }) {
+export function PopularRoutes({ routes, date, loading = false, error = false, onRetry }: {
+  routes: RouteInfo[]; date: string; loading?: boolean; error?: boolean; onRetry?: () => void;
+}) {
   return (
     <section id="popular-routes" className="scroll-mt-24 bg-white py-16 md:py-20" aria-labelledby="routes-title">
       <div className="container">
@@ -33,7 +36,8 @@ export function PopularRoutes({ routes, date }: { routes: RouteInfo[]; date: str
           </div>
           <a href="/#trip-search" className="inline-flex min-h-11 items-center gap-2 font-semibold text-primary underline-offset-4 hover:underline">Find a departure <ArrowRight size={17} aria-hidden="true" /></a>
         </div>
-        {routes.length ? (
+        <div className="mt-8"><ResourceState loading={loading} error={error ? "Routes could not be loaded. Please try again." : null}
+          empty={routes.length === 0} emptyTitle="No routes to show" emptyDescription="Current routes will appear here when schedules are available." onRetry={onRetry}>
           <div className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
             {routes.map(route => {
               const params = new URLSearchParams({
@@ -41,19 +45,19 @@ export function PopularRoutes({ routes, date }: { routes: RouteInfo[]; date: str
                 date: date || isoDate(), pax: "1", type: "one_way",
               });
               return (
-                <article key={route.id} className="overflow-hidden rounded-xl border border-[#e4e7ec] bg-white shadow-[0_12px_30px_-24px_rgba(23,32,42,0.4)]">
+                <article key={route.id} className="ticket-card overflow-hidden transition-shadow hover:shadow-lg">
                   <img
-                    src={CITY_IMAGES[route.origin.code] ?? DEFAULT_IMAGE}
-                    alt={`${route.origin.name} travel destination photograph`}
+                    src={CITY_IMAGES[route.destination.code] ?? DEFAULT_IMAGE}
+                    alt={`${route.destination.name} travel destination photograph`}
                     loading="lazy"
                     decoding="async"
                     className="h-40 w-full object-cover"
                   />
                   <div className="p-5">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#667085]">One-way travel</p>
-                    <h3 className="mt-2 text-lg font-bold text-[#17202a]">{route.origin.name} <span aria-hidden="true">→</span> {route.destination.name}</h3>
-                    <div className="mt-5 flex flex-wrap items-end justify-between gap-3 border-t border-[#e4e7ec] pt-4">
-                      <p className="text-sm text-[#667085]">Regular fare <strong className="block text-xl text-[#17202a]">{money(route.standardFareCents)}</strong></p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">One-way travel</p>
+                    <h3 className="mt-2 text-lg font-bold text-foreground">{route.origin.name} <ArrowRight size={16} className="inline text-primary" aria-hidden="true" /> {route.destination.name}</h3>
+                    <div className="mt-5 flex flex-wrap items-end justify-between gap-3 border-t border-border pt-4">
+                      <p className="text-sm text-muted-foreground">Regular fare <strong className="block text-xl text-foreground">{money(route.standardFareCents)}</strong></p>
                       <Link href={`/search?${params.toString()}`} className="inline-flex min-h-11 items-center gap-2 text-sm font-bold text-primary hover:underline">View schedule <ArrowRight size={16} aria-hidden="true" /></Link>
                     </div>
                   </div>
@@ -61,7 +65,7 @@ export function PopularRoutes({ routes, date }: { routes: RouteInfo[]; date: str
               );
             })}
           </div>
-        ) : <p className="mt-8 rounded-xl border border-[#e4e7ec] bg-[#f7f8fa] p-5 text-[#667085]">{routes.length === 0 ? "Current routes will appear here when schedules are available." : null}</p>}
+        </ResourceState></div>
       </div>
     </section>
   );

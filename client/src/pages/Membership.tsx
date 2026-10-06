@@ -1,11 +1,12 @@
 import { PageShell } from "@/components/Brand";
+import { ActionLink, PageIntro, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { moneyExact } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 
 export default function Membership() {
   const [, setLocation] = useLocation();
@@ -35,43 +36,46 @@ export default function Membership() {
 
   return (
     <PageShell>
-      <div className="container max-w-2xl py-16">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Metro Pro Member</p>
-        <h1 className="mt-3 font-serif text-4xl">A better fare, not unlimited travel.</h1>
-        <p className="mt-4 text-muted-foreground">
-          {monthlyPrice} per month. Your own regular passenger seat drops from $150 to $100
-          for each one-way trip. Companions pay regular fares, and the front passenger seat
-          remains $200 for everyone. Priority booking and one free eligible reschedule are included.
-        </p>
-        <ul className="mt-6 space-y-2 text-sm">
-          {(settings.data?.membershipBenefits ?? []).map(benefit => <li key={benefit}>· {benefit}</li>)}
-        </ul>
-        <div className="mt-6 rounded-xl border border-primary/25 bg-secondary p-4 text-sm leading-relaxed">
-          <strong>Automatic monthly subscription.</strong> Once you enroll through Stripe,
-          your payment method is charged {monthlyPrice} now and automatically every month
-          until you cancel. Manage or cancel billing through your Metro Pro account and Stripe.
-          Creating a member account alone does not start billing.
+      <div className="metro-page metro-page--readable">
+        <PageIntro
+          eyebrow="Metro Pro Member"
+          title="A better fare, not unlimited travel."
+          description={`${monthlyPrice} per month. Your own regular passenger seat drops from $150 to $100 for each one-way trip. Companions pay regular fares, and the front passenger seat remains $200 for everyone. Priority booking and one free eligible reschedule are included.`}
+          actions={active ? <StatusBadge status="active" label="Membership active" /> : null}
+        />
+        <div className="ticket-card p-5 sm:p-7">
+          <h2 className="metro-section-title">What your membership includes</h2>
+          {settings.isLoading ? <p role="status" className="mt-4 text-sm text-muted-foreground">Loading membership details…</p> : null}
+          <ul className="mt-5 grid gap-3 text-sm leading-relaxed">
+            {(settings.data?.membershipBenefits ?? []).map(benefit => <li key={benefit} className="rounded-xl bg-secondary px-4 py-3">{benefit}</li>)}
+          </ul>
+          <StatusNotice tone="pending" className="mt-6">
+            <strong>Automatic monthly subscription.</strong> Once you enroll through Stripe,
+            your payment method is charged {monthlyPrice} now and automatically every month
+            until you cancel. Manage or cancel billing through your Metro Pro account and Stripe.
+            Creating a member account alone does not start billing.
+          </StatusNotice>
+          <p className="mt-5 text-sm leading-relaxed text-muted-foreground">
+            To join, create an account with your full name, email, phone number and private ID photo.
+            Guests can <a href="/#trip-search" className="font-semibold text-primary underline underline-offset-4">book a regular ticket without signing in</a>.
+          </p>
+          {isAuthenticated && !profile.data?.complete && !profile.isLoading ? (
+            <StatusNotice className="mt-5">Your member profile still needs required information and an ID photo.</StatusNotice>
+          ) : null}
+          {isAuthenticated && profile.data?.complete && !active ? (
+            <label className="mt-6 flex items-start gap-3 rounded-xl border border-border bg-white p-4 text-sm leading-relaxed">
+              <input type="checkbox" checked={agreed} onChange={event => setAgreed(event.target.checked)} className="mt-1 h-5 w-5 shrink-0 accent-primary" />
+              <span>I understand that joining authorizes an automatic {monthlyPrice} charge every month until I cancel.</span>
+            </label>
+          ) : null}
+          {active ? (
+            <ActionLink href="/account/membership" variant="primary" className="mt-7 min-h-12">Manage my membership</ActionLink>
+          ) : (
+            <Button className="mt-7 min-h-12" disabled={start.isPending || (isAuthenticated && profile.data?.complete && !agreed)} onClick={continueToMembership}>
+              {!isAuthenticated ? "Create a member account" : profile.data?.complete ? `Subscribe for ${monthlyPrice}/month` : "Complete member profile"}
+            </Button>
+          )}
         </div>
-        <p className="mt-5 text-sm text-muted-foreground">
-          To join, create an account with your full name, email, phone number and private ID photo.
-          Guests can <a href="/#trip-search" className="font-semibold text-primary underline">book a regular ticket without signing in</a>.
-        </p>
-        {isAuthenticated && !profile.data?.complete && !profile.isLoading ? (
-          <p className="mt-4 text-sm font-medium text-primary">Your member profile still needs required information and an ID photo.</p>
-        ) : null}
-        {isAuthenticated && profile.data?.complete && !active ? (
-          <label className="mt-7 flex items-start gap-3 rounded-xl border border-border bg-white p-4 text-sm leading-relaxed">
-            <input type="checkbox" checked={agreed} onChange={event => setAgreed(event.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-primary" />
-            <span>I understand that joining authorizes an automatic {monthlyPrice} charge every month until I cancel.</span>
-          </label>
-        ) : null}
-        {active ? (
-          <Link href="/account/membership"><Button className="mt-8 h-12">Manage my membership</Button></Link>
-        ) : (
-          <Button className="mt-8 min-h-12" disabled={start.isPending || (isAuthenticated && profile.data?.complete && !agreed)} onClick={continueToMembership}>
-            {!isAuthenticated ? "Create a member account" : profile.data?.complete ? `Subscribe for ${monthlyPrice}/month` : "Complete member profile"}
-          </Button>
-        )}
       </div>
     </PageShell>
   );

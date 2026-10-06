@@ -1,10 +1,11 @@
 import { PageShell } from "@/components/Brand";
+import { ActionLink, BookingProgress, PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import SeatMap from "@/components/SeatMap";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatTime, money } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useCallback, useMemo, useState } from "react";
-import { Link, useLocation, useSearch } from "wouter";
+import { useLocation, useSearch } from "wouter";
 
 type SeatChoice = { seatNumber: string; seatType: "standard" | "front"; status: "available" | "held" | "taken"; priceCents: number };
 type ExistingDraft = { out: string | null; ret: string | null; pax: string; passengers?: { firstName: string; lastName: string; seatNumber?: string; returnSeatNumber?: string; isMemberTraveler: boolean }[]; contactFirstName?: string; contactLastName?: string; phone?: string; email?: string; emergencyName?: string; emergencyPhone?: string };
@@ -46,6 +47,7 @@ export default function SeatSelection() {
   const estimate = outSeats.reduce((total, number) => total + (outMap.data?.find(seat => seat.seatNumber === number)?.priceCents ?? 0), 0) +
     (ret ? retSeats.reduce((total, number) => total + (retMap.data?.find(seat => seat.seatNumber === number)?.priceCents ?? 0), 0) : 0);
   const back = `/trip?${params}`;
+  const loading = outbound.isLoading || outMap.isLoading || Boolean(ret && (inbound.isLoading || retMap.isLoading));
 
   function continueToPassengers() {
     if (!ready) return;
@@ -63,26 +65,26 @@ export default function SeatSelection() {
     setLocation(`/book?${params}`);
   }
 
-  return <PageShell><main className="container pb-28 pt-8 sm:pt-12 lg:pb-16">
-    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Your trip · Step 3</p>
-    <h1 className="mt-2 font-serif text-3xl sm:text-4xl">Select your seat</h1>
-    {outbound.data ? <p className="mt-2 text-sm text-muted-foreground">{outbound.data.origin?.name} → {outbound.data.destination?.name} · {formatDate(outbound.data.departAt)} · {formatTime(outbound.data.departAt)} · {outbound.data.vehicleCode ? `Service ${outbound.data.vehicleCode}` : "Vehicle assignment pending"}</p> : null}
-    <p className="mt-2 text-sm text-muted-foreground">Seats are selected for passenger 1, passenger 2, and so on. <strong>No seat is held until secure checkout creates your booking.</strong></p>
-    {!valid || outbound.error || inbound.error ? <div role="alert" className="ticket-card mt-5 p-5">Trip or seat information could not be loaded. <Link href={back} className="text-primary underline">Return to trip details</Link>.</div> : null}
-    <div className="mt-7 grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+  return <PageShell><main className="metro-page metro-page--wide pb-28 lg:pb-20">
+    <BookingProgress current="Seats" />
+    <PageIntro eyebrow="Your trip · Step 3" title="Select your seat" description="Seats are selected for passenger 1, passenger 2, and so on. No seat is held until secure checkout creates your booking." />
+    {outbound.data ? <div className="mb-5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><span>{outbound.data.origin?.name} → {outbound.data.destination?.name} · {formatDate(outbound.data.departAt)} · {formatTime(outbound.data.departAt)} · {outbound.data.vehicleCode ? `Service ${outbound.data.vehicleCode}` : "Vehicle assignment pending"}</span><StatusBadge status="pending" label="Choose seats" /></div> : null}
+    {!valid || outbound.error || inbound.error || outMap.error || retMap.error ? <StatusNotice tone="error" className="mb-6">Trip or seat information could not be loaded. <ActionLink href={back} back className="ml-2 align-middle">Return to trip details</ActionLink></StatusNotice> : null}
+    {valid && loading ? <div className="mb-6"><ResourceState loading>Loading current seat availability…</ResourceState></div> : null}
+    <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
       <div className="min-w-0 space-y-7">
-        {valid ? <section aria-label="Outbound seats"><h2 className="mb-3 font-serif text-xl">Outbound seats</h2><SeatMap departureId={out} passengerCount={pax} selectedSeats={outSeats} onSeatSelect={selectOut} onSeatDeselect={removeOut} /></section> : null}
-        {valid && ret ? <section aria-label="Return seats"><h2 className="mb-3 font-serif text-xl">Return seats · {inbound.data ? formatDate(inbound.data.departAt) : "Loading"}</h2><SeatMap departureId={ret} passengerCount={pax} selectedSeats={retSeats} onSeatSelect={selectRet} onSeatDeselect={removeRet} /></section> : null}
-        <Link href={back} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary underline">Back to trip details</Link>
+        {valid ? <section aria-label="Outbound seats"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="metro-section-title">Outbound seats</h2><StatusBadge status={outSeats.filter(Boolean).length === pax ? "available" : "pending"} label={`${outSeats.filter(Boolean).length}/${pax} selected`} /></div><SeatMap departureId={out} passengerCount={pax} selectedSeats={outSeats} onSeatSelect={selectOut} onSeatDeselect={removeOut} showHeading={false} label="Outbound seat map" /></section> : null}
+        {valid && ret ? <section aria-label="Return seats"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="metro-section-title">Return seats · {inbound.data ? formatDate(inbound.data.departAt) : "Loading"}</h2><StatusBadge status={retSeats.filter(Boolean).length === pax ? "available" : "pending"} label={`${retSeats.filter(Boolean).length}/${pax} selected`} /></div><SeatMap departureId={ret} passengerCount={pax} selectedSeats={retSeats} onSeatSelect={selectRet} onSeatDeselect={removeRet} showHeading={false} label="Return seat map" /></section> : null}
+        <ActionLink href={back} back>Back to trip details</ActionLink>
       </div>
-      <aside className="ticket-card sticky top-24 hidden space-y-4 p-5 lg:block" aria-label="Selected trip summary"><h2 className="font-serif text-xl">Your selection</h2>
+      <aside className="ticket-card sticky top-24 hidden space-y-4 p-5 lg:block" aria-label="Selected trip summary"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-serif text-xl">Your selection</h2><StatusBadge status={ready ? "available" : "pending"} label={ready ? "Seats selected" : "Selection in progress"} /></div>
         <p className="text-sm">{outbound.data?.origin?.name} → {outbound.data?.destination?.name}</p>
         <p className="text-sm">{pax} passenger{pax === 1 ? "" : "s"}</p>
         <ol className="space-y-1 text-sm">{outSeats.map((seat, index) => <li key={index}>Passenger {index + 1}: {seat ? `Seat ${seat}` : "Choose a seat"}{ret ? ` · Return ${retSeats[index] ?? "not selected"}` : ""}</li>)}</ol>
-        <div className="border-t border-border pt-3 text-sm"><p>Regular-fare estimate <strong>{money(estimate)}</strong></p><p className="mt-1 text-xs text-muted-foreground">Exact member pricing and total are calculated at review.</p></div>
+        <div className="border-t border-border pt-3 text-sm"><p>Regular-fare estimate <strong>{money(estimate)}</strong></p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Exact member pricing and total are calculated at review.</p></div>
         <Button className="min-h-12 w-full" disabled={!ready} onClick={continueToPassengers}>Continue to passenger details</Button>
       </aside>
     </div>
-    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(0,0,0,.08)] backdrop-blur lg:hidden"><div className="mx-auto flex max-w-3xl items-center justify-between gap-3"><div className="min-w-0 text-sm"><strong>{outSeats.filter(Boolean).length}/{pax} outbound seats</strong>{ret ? <p className="text-xs text-muted-foreground">{retSeats.filter(Boolean).length}/{pax} return · Estimate {money(estimate)}</p> : <p className="text-xs text-muted-foreground">Estimate {money(estimate)}</p>}</div><Button className="min-h-11 shrink-0" disabled={!ready} onClick={continueToPassengers}>Continue</Button></div></div>
+    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(0,0,0,.08)] backdrop-blur lg:hidden"><div className="mx-auto flex max-w-[1200px] items-center justify-between gap-3"><div className="min-w-0 text-sm"><strong>{outSeats.filter(Boolean).length}/{pax} outbound seats</strong>{ret ? <p className="text-xs text-muted-foreground">{retSeats.filter(Boolean).length}/{pax} return · Estimate {money(estimate)}</p> : <p className="text-xs text-muted-foreground">Estimate {money(estimate)}</p>}</div><Button className="min-h-11 shrink-0" disabled={!ready} onClick={continueToPassengers}>Continue</Button></div></div>
   </main></PageShell>;
 }

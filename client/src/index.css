@@ -47,24 +47,43 @@
 
 :root {
   --radius: 0.9rem;
-  --background: #f3fafd;
-  --foreground: #17384a;
+  --metro-content-width: 1200px;
+  --metro-wide-width: 1280px;
+  --metro-readable-width: 760px;
+  --metro-control-height: 44px;
+  --metro-card-radius: 1.1rem;
+  --metro-card-shadow: 0 18px 45px -31px rgba(27, 81, 101, 0.35), 0 3px 12px -8px rgba(20, 80, 94, 0.18);
+  --metro-ink: #17202a;
+  --metro-muted: #526473;
+  --metro-surface: #ffffff;
+  --metro-surface-soft: #f7f8fa;
+  --metro-line: #e4e7ec;
+  --metro-success: #196d53;
+  --metro-success-bg: #e5f5ed;
+  --metro-warning: #895719;
+  --metro-warning-bg: #fff2db;
+  --metro-error: #a33e43;
+  --metro-error-bg: #fff0f1;
+  --metro-selected: #2563eb;
+  --metro-selected-bg: #e8f0ff;
+  --background: #f7f8fa;
+  --foreground: #17202a;
   --card: #ffffff;
-  --card-foreground: #17384a;
+  --card-foreground: #17202a;
   --popover: #ffffff;
-  --popover-foreground: #17384a;
+  --popover-foreground: #17202a;
   --primary: #137a86;
   --primary-foreground: #ffffff;
   --secondary: #e7f4f3;
   --secondary-foreground: #174554;
-  --muted: #edf5f8;
-  --muted-foreground: #536c78;
+  --muted: #f1f5f6;
+  --muted-foreground: #526473;
   --accent: #137a86;
   --accent-foreground: #ffffff;
   --destructive: #a33e43;
   --destructive-foreground: #ffffff;
-  --border: #cfe1e8;
-  --input: #bed4dd;
+  --border: #e4e7ec;
+  --input: #d0d5dd;
   --ring: #2a95a0;
   --chart-1: #137a86;
   --chart-2: #e09a5b;
@@ -97,6 +116,15 @@
     max-width: 100%;
     font-family: inherit;
   }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea {
+    min-height: var(--metro-control-height);
+    border-radius: 0.75rem;
+  }
+  input:disabled, select:disabled, textarea:disabled { cursor: not-allowed; opacity: 0.6; }
+  :is(a, button, input, select, textarea):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
   input[type="date"], input[type="datetime-local"] {
     display: block;
     width: 100%;
@@ -128,14 +156,54 @@
     .container { padding-left: 1.5rem; padding-right: 1.5rem; }
   }
   @media (min-width: 1024px) {
-    .container { padding-left: 2rem; padding-right: 2rem; max-width: 1280px; }
+    .container { padding-left: 2rem; padding-right: 2rem; max-width: var(--metro-content-width); }
   }
+  .metro-page { width: 100%; max-width: var(--metro-content-width); margin-inline: auto; padding: 2rem 1rem 4rem; }
+  .metro-page--wide { max-width: var(--metro-wide-width); }
+  .metro-page--readable { max-width: var(--metro-readable-width); }
+  @media (min-width: 640px) { .metro-page { padding: 3rem 1.5rem 5rem; } }
+  @media (min-width: 1024px) { .metro-page { padding-inline: 2rem; } }
+  .metro-eyebrow { margin: 0 0 0.5rem; color: var(--primary); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.17em; line-height: 1.4; text-transform: uppercase; }
+  .metro-page-title { margin: 0; color: var(--metro-ink); font-family: var(--font-serif); font-size: clamp(2rem, 3.4vw, 2.75rem); font-weight: 600; line-height: 1.12; letter-spacing: -0.025em; }
+  .metro-page-description { max-width: 62ch; margin-top: 0.75rem; color: var(--metro-muted); font-size: 0.95rem; line-height: 1.65; }
+  .metro-section-title { color: var(--metro-ink); font-family: var(--font-serif); font-size: clamp(1.4rem, 2.4vw, 1.9rem); font-weight: 600; line-height: 1.2; }
   .ticket-card {
-    background: #ffffff;
-    border: 1px solid #d5e7eb;
-    border-radius: 1.1rem;
-    box-shadow: 0 18px 45px -31px rgba(27, 81, 101, 0.35), 0 3px 12px -8px rgba(20, 80, 94, 0.18);
+    min-width: 0;
+    background: var(--metro-surface);
+    border: 1px solid var(--metro-line);
+    border-radius: var(--metro-card-radius);
+    box-shadow: var(--metro-card-shadow);
   }
+  .metro-action-link { display: inline-flex; min-height: var(--metro-control-height); align-items: center; justify-content: center; gap: 0.5rem; border: 1px solid var(--metro-line); border-radius: 0.75rem; background: white; padding: 0.6rem 1rem; color: var(--metro-ink); font-size: 0.875rem; font-weight: 600; text-decoration: none; transition: background-color 150ms, border-color 150ms, color 150ms; }
+  .metro-action-link:hover { border-color: var(--primary); background: var(--secondary); color: var(--primary); }
+  .metro-action-link--primary { border-color: var(--primary); background: var(--primary); color: white; }
+  .metro-action-link--primary:hover { background: #0d626d; color: white; }
+  .metro-form-label { color: var(--metro-ink); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .metro-control { width: 100%; min-height: 48px; border: 1px solid var(--input); border-radius: 0.75rem; background: white; padding-inline: 0.85rem; color: var(--metro-ink); font-size: 0.875rem; }
+  .metro-control:focus-visible { border-color: var(--ring); }
+  .metro-status { display: inline-flex; max-width: 100%; align-items: center; gap: 0.35rem; border: 1px solid transparent; border-radius: 999px; padding: 0.25rem 0.65rem; font-size: 0.75rem; font-weight: 700; line-height: 1.4; white-space: normal; }
+  .metro-status--success { border-color: #a9dcc5; background: var(--metro-success-bg); color: var(--metro-success); }
+  .metro-status--pending { border-color: #eac993; background: var(--metro-warning-bg); color: var(--metro-warning); }
+  .metro-status--error { border-color: #edb6b9; background: var(--metro-error-bg); color: var(--metro-error); }
+  .metro-status--info { border-color: var(--metro-line); background: var(--secondary); color: var(--primary); }
+  .metro-status--neutral { border-color: var(--metro-line); background: var(--muted); color: var(--metro-muted); }
+  .metro-notice { min-width: 0; border: 1px solid var(--metro-line); border-radius: 0.9rem; background: var(--secondary); padding: 1rem 1.25rem; color: var(--metro-ink); font-size: 0.875rem; line-height: 1.6; overflow-wrap: anywhere; }
+  .metro-notice--error { border-color: #edb6b9; background: var(--metro-error-bg); color: var(--metro-error); }
+  .metro-notice--pending { border-color: #eac993; background: var(--metro-warning-bg); color: var(--metro-warning); }
+  .metro-notice--success { border-color: #a9dcc5; background: var(--metro-success-bg); color: var(--metro-success); }
+  .metro-nav-scroll { display: flex; gap: 0.35rem; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; padding-bottom: 0.4rem; }
+  .metro-nav-scroll a { display: inline-flex; min-height: var(--metro-control-height); flex: 0 0 auto; align-items: center; border-radius: 0.75rem; padding: 0.5rem 0.85rem; font-size: 0.875rem; font-weight: 600; white-space: nowrap; text-decoration: none; }
+  .metro-nav-scroll a:hover, .metro-nav-scroll a[aria-current="page"] { background: var(--secondary); color: var(--primary); }
+  .metro-responsive-table { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .metro-responsive-table table { min-width: 640px; border-collapse: collapse; font-size: 0.875rem; }
+  .metro-responsive-table th { border-bottom: 1px solid var(--metro-line); background: var(--muted); padding: 0.75rem 1rem; color: var(--metro-muted); text-align: left; font-size: 0.75rem; font-weight: 700; }
+  .metro-responsive-table td { border-bottom: 1px solid var(--metro-line); padding: 0.9rem 1rem; }
+  .metro-responsive-table tbody tr:hover { background: var(--metro-surface-soft); }
+  .metro-seat--available { border-color: #91cbb1; background: var(--metro-success-bg); color: var(--metro-success); }
+  .metro-seat--selected { border-color: var(--metro-selected); background: var(--metro-selected-bg); color: #1746a2; box-shadow: 0 0 0 2px white, 0 0 0 4px var(--metro-selected); }
+  .metro-seat--held { border-color: #eac993; background: var(--metro-warning-bg); color: var(--metro-warning); }
+  .metro-seat--taken { border-color: #edb6b9; background: var(--metro-error-bg); color: var(--metro-error); }
+  .metro-seat--blocked { border-color: var(--metro-line); background: var(--muted); color: var(--metro-muted); }
   .price-copper { color: #0f7380; font-variant-numeric: tabular-nums; }
   .stamp-soldout {
     letter-spacing: 0.14em;

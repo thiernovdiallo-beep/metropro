@@ -73,4 +73,19 @@ describe("standalone SeatMap", () => {
     expect(html).toContain("Seat availability could not be loaded");
     expect(html).toContain("Try again");
   });
+
+  it("shows a real loading state instead of falsely rendering blocked seat buttons", () => {
+    mock.isLoading = true;
+    mock.seats = [];
+    const html = render();
+    expect(html).toContain("Loading live seats…");
+    expect(html).not.toContain('aria-label="Seat 2A, blocked"');
+  });
+
+  it("shows an explicit no-seats state for an empty authoritative map", () => {
+    mock.seats = [];
+    const html = render();
+    expect(html).toContain("No seats are available for this departure");
+    expect(html).not.toContain('aria-label="Seat 2A, blocked"');
+  });
 });

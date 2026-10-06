@@ -14,14 +14,17 @@ type SeatMapProps = {
   onSeatDeselect: (seatNumber: string, passengerIndex: number) => void;
   /** Optional real booking hold expiry. Selection alone does not reserve a seat. */
   holdExpiresAt?: Date | string | number | null;
+  /** The enclosing trip section can provide its own outbound/return heading. */
+  showHeading?: boolean;
+  label?: string;
 };
 
 const seatColors: Record<SeatStatus, string> = {
-  available: "border-green-700 bg-green-100 text-green-900 hover:bg-green-200",
-  taken: "border-red-700 bg-red-100 text-red-900",
-  held: "border-amber-600 bg-amber-100 text-amber-950",
-  selected: "border-blue-700 bg-blue-100 text-blue-950 ring-2 ring-blue-500 ring-offset-2",
-  blocked: "border-gray-400 bg-gray-200 text-gray-600",
+  available: "metro-seat--available hover:brightness-95",
+  taken: "metro-seat--taken",
+  held: "metro-seat--held",
+  selected: "metro-seat--selected",
+  blocked: "metro-seat--blocked",
 };
 
 const legend: { label: string; status: SeatStatus }[] = [
@@ -54,6 +57,8 @@ export default function SeatMap({
   onSeatSelect,
   onSeatDeselect,
   holdExpiresAt,
+  showHeading = true,
+  label,
 }: SeatMapProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [tooltipSeat, setTooltipSeat] = useState<string | null>(null);
@@ -148,10 +153,10 @@ export default function SeatMap({
   }
 
   return (
-    <section className="ticket-card min-w-0 p-4 sm:p-6" aria-labelledby={`seat-map-title-${departureId}`}>
+    <section className="ticket-card min-w-0 p-4 sm:p-6" aria-labelledby={showHeading ? `seat-map-title-${departureId}` : undefined} aria-label={showHeading ? undefined : label ?? "Seat map"}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 id={`seat-map-title-${departureId}`} className="font-serif text-xl sm:text-2xl">Choose your seats</h2>
+          {showHeading ? <h2 id={`seat-map-title-${departureId}`} className="font-serif text-xl sm:text-2xl">Choose your seats</h2> : null}
           <p className="mt-1 text-sm text-muted-foreground">{selectedCount} of {passengerCount} passengers assigned</p>
         </div>
         <p className="rounded-full bg-muted px-3 py-1.5 text-xs font-semibold text-foreground" aria-live={timeLeft === "00:00" ? "assertive" : "off"}>
@@ -161,13 +166,15 @@ export default function SeatMap({
       <div className="mt-4 flex flex-wrap gap-x-3 gap-y-2" aria-label="Seat status legend">
         {legend.map(({ label, status }) => (
           <span key={status} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span aria-hidden="true" className={`size-3.5 rounded border ${seatColors[status].split(" ").filter(className => className.startsWith("bg-") || className.startsWith("border-")).join(" ")}`} />
+            <span aria-hidden="true" className={`size-3.5 rounded border ${seatColors[status]}`} />
             {label}
           </span>
         ))}
       </div>
 
-      <div className="mx-auto mt-5 w-full max-w-[320px] rounded-[2rem] border-2 border-border bg-[#f8fcfd] px-3 py-5 shadow-inner sm:px-5" aria-busy={seatMap.isLoading}>
+      {seatMap.isLoading ? <div role="status" className="mx-auto mt-5 flex min-h-56 w-full max-w-[320px] items-center justify-center rounded-[2rem] border-2 border-border bg-background px-4 text-center text-sm text-muted-foreground">Loading live seats…</div>
+        : !seatMap.isError && seats?.length === 0 ? <div role="status" className="metro-notice mx-auto mt-5 max-w-[320px] text-center">No seats are available for this departure. Please choose another trip or refresh availability.</div>
+        : <div className="mx-auto mt-5 w-full max-w-[320px] rounded-[2rem] border-2 border-border bg-background px-3 py-5 shadow-inner sm:px-5">
         <div className="mb-5 flex flex-col items-center gap-1 text-muted-foreground">
           <svg aria-hidden="true" viewBox="0 0 40 40" className="size-8 fill-none stroke-current stroke-2">
             <circle cx="20" cy="20" r="14" />
@@ -182,7 +189,7 @@ export default function SeatMap({
             const right = layout.find(seat => seat.row === row && seat.column === 1);
             return (
               <div key={row} role="group" aria-label={row === 1 ? "Front passenger row" : `Row ${row}`}
-                className={row === 1 ? "rounded-2xl border border-amber-200 bg-white p-2" : ""}>
+                className={row === 1 ? "rounded-2xl border border-border bg-white p-2" : ""}>
                 {row === 1 ? <p className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Front row</p> : null}
                 <div className="grid grid-cols-[minmax(0,1fr)_2.25rem_minmax(0,1fr)] items-center">
                   {left ? renderSeat(left) : <span aria-hidden="true" />}
@@ -193,13 +200,12 @@ export default function SeatMap({
             );
           })}
         </div>
-        {seatMap.isLoading ? <p role="status" className="mt-4 text-center text-sm text-muted-foreground">Loading live seats…</p> : null}
         {seatMap.isError ? (
           <div role="alert" className="mt-4 text-center text-sm text-destructive">
             Seat availability could not be loaded. <button type="button" onClick={() => void seatMap.refetch()} className="font-semibold underline focus-visible:outline-2 focus-visible:outline-offset-2">Try again</button>
           </div>
         ) : null}
-      </div>
+      </div>}
 
       {tooltipSeat && message ? (
         <p id={`seat-tooltip-${departureId}`} role="tooltip" className="mx-auto mt-3 max-w-[320px] rounded-lg border border-border bg-card px-3 py-2 text-center text-sm shadow-sm">{message}</p>
@@ -214,7 +220,7 @@ export default function SeatMap({
               <li key={index} className="flex min-w-0 items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
                 <span className="min-w-0 truncate">Passenger {index + 1} <span className="text-muted-foreground">·</span> <strong>{number || "Choose a seat"}</strong></span>
                 {number ? (
-                  <button type="button" aria-label={`Remove seat ${number} from passenger ${index + 1}`} onClick={() => onSeatDeselect(number, index)} className="shrink-0 rounded px-2 py-1 text-xs font-semibold text-primary underline focus-visible:outline-2 focus-visible:outline-offset-2">Remove</button>
+                  <button type="button" aria-label={`Remove seat ${number} from passenger ${index + 1}`} onClick={() => onSeatDeselect(number, index)} className="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-xs font-semibold text-primary underline underline-offset-4 hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2">Remove</button>
                 ) : null}
               </li>
             );
