@@ -302,6 +302,8 @@ export const passengers = mysqlTable(
   {
     id: int("id").autoincrement().primaryKey(),
     bookingId: int("bookingId").notNull(),
+    departureId: int("departureId"),
+    seatNumber: varchar("seatNumber", { length: 10 }),
     firstName: varchar("firstName", { length: 80 }).notNull(),
     lastName: varchar("lastName", { length: 80 }).notNull(),
     outboundSeatType: mysqlEnum("outboundSeatType", ["standard", "front"])
@@ -313,7 +315,10 @@ export const passengers = mysqlTable(
       .notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
-  table => [index("passengers_bookingId_idx").on(table.bookingId)]
+  table => [
+    index("passengers_bookingId_idx").on(table.bookingId),
+    uniqueIndex("passengers_departure_seat_unique").on(table.departureId, table.seatNumber),
+  ]
 );
 
 export const tickets = mysqlTable(
