@@ -57,7 +57,11 @@ export function SiteHeader() {
   const navClass = (active: boolean) => `inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${active ? "bg-secondary text-primary" : "text-foreground/75 hover:bg-secondary hover:text-primary"}`;
   const renderLink = (item: NavItem, mobile = false) => <a key={`${mobile ? "mobile" : "desktop"}-${item.label}`} href={item.href}
     aria-current={item.active ? "page" : undefined} onClick={mobile ? () => setMobileOpen(false) : undefined}
-    className={`${navClass(item.active)} ${mobile ? "w-full" : ""}`}>{item.label}</a>;
+    className={`${navClass(false)} group ${item.active ? "text-primary" : ""} ${mobile ? "w-full" : ""}`}>
+    <span className={`inline-flex border-b-2 pb-1 transition-[border-color] duration-150 motion-reduce:transition-none ${item.active ? "border-primary" : "border-transparent group-hover:border-primary"}`}>
+      {item.label}
+    </span>
+  </a>;
   const authAction = !isStaffLogin && (isAuthenticated && !isHome
     ? <Button type="button" variant="outline" onClick={() => logout()}>Sign out</Button>
     : <button type="button" onClick={memberEntry} className={navClass(false)}>{isAuthenticated ? "My trips" : "Sign In"}</button>);
