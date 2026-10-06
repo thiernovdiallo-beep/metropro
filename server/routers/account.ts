@@ -314,11 +314,13 @@ export const accountRouter = router({
       if (booking.returnDepartureId) {
         await restoreSoldSeats(booking.returnDepartureId, booking.passengerCount, booking.returnFrontSeats);
       }
-      await db
-        .update(bookings)
-        .set({ status: booking.stripePaymentIntentId ? "refunded" : "canceled" })
-        .where(eq(bookings.id, booking.id));
-      await db.update(tickets).set({ status: "voided" }).where(eq(tickets.bookingId, booking.id));
+      await db.transaction(async tx => {
+        await tx.update(bookings).set({ status: booking.stripePaymentIntentId ? "refunded" : "canceled" })
+          .where(eq(bookings.id, booking.id));
+        await tx.update(passengers).set({ departureId: null, seatNumber: null, returnDepartureId: null, returnSeatNumber: null })
+          .where(eq(passengers.bookingId, booking.id));
+        await tx.update(tickets).set({ status: "voided" }).where(eq(tickets.bookingId, booking.id));
+      });
       await notify({
         userId: ctx.user.id,
         templateKey: TEMPLATES.trip_cancellation,
@@ -419,14 +421,17 @@ export const accountRouter = router({
       if (booking.returnDepartureId) {
         await restoreSoldSeats(booking.returnDepartureId, booking.passengerCount, booking.returnFrontSeats);
       }
-      await db
-        .update(bookings)
-        .set({
+      await db.transaction(async tx => {
+        await tx.update(bookings).set({
           outboundDepartureId: input.newOutboundDepartureId,
           returnDepartureId: input.newReturnDepartureId,
           usedFreeReschedule: useFree || booking.usedFreeReschedule,
-        })
-        .where(eq(bookings.id, booking.id));
+        }).where(eq(bookings.id, booking.id));
+        // A different departure has a different seat map. Keep the existing
+        // quantity-based reschedule; a new physical seat must be chosen later.
+        await tx.update(passengers).set({ departureId: null, seatNumber: null, returnDepartureId: null, returnSeatNumber: null })
+          .where(eq(passengers.bookingId, booking.id));
+      });
       await db.delete(tickets).where(eq(tickets.bookingId, booking.id));
       const pax = await db.select().from(passengers).where(eq(passengers.bookingId, booking.id));
       const { makeQrToken } = await import("../services/tickets");

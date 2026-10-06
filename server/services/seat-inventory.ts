@@ -1,9 +1,11 @@
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull, or } from "drizzle-orm";
 import { bookings, departures, passengers, routes, vehicles } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { seatFareCents } from "./pricing";
 import { getSeatLayout } from "./seat-layout";
 
+type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type BookingStatus = typeof bookings.$inferSelect.status;
 export type SeatAvailabilityStatus = "available" | "taken" | "held";
 export type SeatAvailability = {
@@ -31,11 +33,11 @@ export function seatStatusForBooking(
 }
 
 /** Public, non-member fare and assignment state for every physical seat in a departure. */
-export async function getSeatAvailability(departureId: number): Promise<SeatAvailability[]> {
+export async function getSeatAvailability(departureId: number, transaction?: Transaction): Promise<SeatAvailability[]> {
   if (!Number.isSafeInteger(departureId) || departureId < 1) {
     throw new Error("Invalid departure ID");
   }
-  const db = await getDb();
+  const db = transaction ?? await getDb();
   if (!db) throw new Error("Database unavailable");
 
   const [departure] = await db
@@ -62,23 +64,28 @@ export async function getSeatAvailability(departureId: number): Promise<SeatAvai
 
   const assignments = await db
     .select({
+      departureId: passengers.departureId,
       seatNumber: passengers.seatNumber,
+      returnDepartureId: passengers.returnDepartureId,
+      returnSeatNumber: passengers.returnSeatNumber,
       bookingStatus: bookings.status,
       holdExpiresAt: bookings.holdExpiresAt,
     })
     .from(passengers)
     .innerJoin(bookings, eq(passengers.bookingId, bookings.id))
-    .where(and(eq(passengers.departureId, departureId), isNotNull(passengers.seatNumber)));
+    .where(or(
+      and(eq(passengers.departureId, departureId), isNotNull(passengers.seatNumber)),
+      and(eq(passengers.returnDepartureId, departureId), isNotNull(passengers.returnSeatNumber))
+    ));
 
   const now = new Date();
   const statusBySeat = new Map<string, SeatAvailabilityStatus>();
   for (const assignment of assignments) {
-    if (assignment.seatNumber !== null) {
-      statusBySeat.set(
-        assignment.seatNumber,
-        seatStatusForBooking(assignment.bookingStatus, assignment.holdExpiresAt, now)
-      );
-    }
+    const seatNumber = assignment.departureId === departureId ? assignment.seatNumber : assignment.returnSeatNumber;
+    if (!seatNumber) continue;
+    const status = seatStatusForBooking(assignment.bookingStatus, assignment.holdExpiresAt, now);
+    const previous = statusBySeat.get(seatNumber);
+    if (status === "taken" || (status === "held" && previous !== "taken") || !previous) statusBySeat.set(seatNumber, status);
   }
 
   return getSeatLayout(departure.vehicleCapacity).map(({ seatNumber, seatType }) => ({

@@ -11,6 +11,7 @@ import { getMemberProfileStatus } from "../services/member-profile";
 import { frontCount, legFareCents, seatFareCents, validateSeatSelections, type SeatSelection } from "../services/pricing";
 import { getSettings } from "../services/policies";
 import { getSeatAvailability } from "../services/seat-inventory";
+import { validateNumberedSeats } from "../services/seat-selection";
 import { throttleSeatMap } from "../services/seat-map-rate-limit";
 import { makeBookingNumber } from "../services/tickets";
 import { getStripe, stripeEnabled } from "../stripe/client";
@@ -23,6 +24,8 @@ const passengerSchema = z.object({
   lastName: z.string().trim().min(1),
   outboundSeatType: z.enum(["standard", "front"]),
   returnSeatType: z.enum(["standard", "front"]).nullable(),
+  seatNumber: z.string().trim().min(1).max(10).optional(),
+  returnSeatNumber: z.string().trim().min(1).max(10).optional(),
   isMemberTraveler: z.boolean(),
 });
 
@@ -161,6 +164,9 @@ export const bookingRouter = router({
       const ret = input.returnDepartureId ? await loadPricedDeparture(input.returnDepartureId) : null;
       if (input.returnDepartureId && !ret) throw new TRPCError({ code: "NOT_FOUND", message: "Return departure not found" });
       requireReversedRoute(outbound, ret);
+      if (!ret && input.passengers.some(p => p.returnSeatNumber)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Return seats require a return departure." });
+      }
       const outFront = frontCount(input.passengers, "outbound");
       const retFront = frontCount(input.passengers, "return");
       try {
@@ -194,42 +200,60 @@ export const bookingRouter = router({
       // after Checkout expires so paid webhooks can confirm both legs safely.
       const checkoutMinutes = Math.min(1430, Math.max(30, settings.holdMinutes));
       const checkoutExpiresAt = Math.floor(Date.now() / 1000) + checkoutMinutes * 60 + 120;
+      const hasSeatNumbers = input.passengers.some(p => p.seatNumber || p.returnSeatNumber);
       let bookingId: number | null = null;
       try {
-        const insertResult = await db.insert(bookings).values({
-          bookingNumber,
-          userId: ctx.user?.id ?? null,
-          guestAccessHash: guestAccess?.hash ?? null,
-          outboundDepartureId: outbound.id,
-          returnDepartureId: ret?.id ?? null,
-          tripType: ret ? "round_trip" : "one_way",
-          passengerCount: input.passengerCount,
-          outboundFrontSeats: outFront,
-          returnFrontSeats: retFront,
-          fareType: input.passengers.some(p => p.isMemberTraveler && (p.outboundSeatType === "standard" || p.returnSeatType === "standard")) ? "member" : "standard",
-          outboundQuotedCents,
-          returnQuotedCents,
-          amountCents,
-          status: "pending_payment",
-          contactFirstName: input.contactFirstName,
-          contactLastName: input.contactLastName,
-          contactPhone: input.contactPhone,
-          contactEmail: input.contactEmail,
-          emergencyName: input.emergencyName ?? null,
-          emergencyPhone: input.emergencyPhone ?? null,
-          holdExpiresAt: new Date((checkoutExpiresAt + 5 * 60) * 1000),
-        });
-        bookingId = insertId(insertResult);
-        for (const p of input.passengers) {
-          await db.insert(passengers).values({
-            bookingId,
-            firstName: p.firstName,
-            lastName: p.lastName,
-            outboundSeatType: p.outboundSeatType,
-            returnSeatType: p.returnSeatType,
-            status: "booked",
+        bookingId = await db.transaction(async tx => {
+          if (hasSeatNumbers) {
+            // Separate outbound/return indexes cannot prevent cross-leg conflicts.
+            // Lock both departure rows in stable order until validation and inserts commit.
+            const ids = [outbound.id, ...(ret ? [ret.id] : [])].sort((a, b) => a - b);
+            for (const id of ids) {
+              await tx.select({ id: departures.id }).from(departures).where(eq(departures.id, id)).for("update");
+            }
+            validateNumberedSeats(await getSeatAvailability(outbound.id, tx), input.passengers, "outbound");
+            if (ret) validateNumberedSeats(await getSeatAvailability(ret.id, tx), input.passengers, "return");
+          }
+          const insertResult = await tx.insert(bookings).values({
+            bookingNumber,
+            userId: ctx.user?.id ?? null,
+            guestAccessHash: guestAccess?.hash ?? null,
+            outboundDepartureId: outbound.id,
+            returnDepartureId: ret?.id ?? null,
+            tripType: ret ? "round_trip" : "one_way",
+            passengerCount: input.passengerCount,
+            outboundFrontSeats: outFront,
+            returnFrontSeats: retFront,
+            fareType: input.passengers.some(p => p.isMemberTraveler && (p.outboundSeatType === "standard" || p.returnSeatType === "standard")) ? "member" : "standard",
+            outboundQuotedCents,
+            returnQuotedCents,
+            amountCents,
+            status: "pending_payment",
+            contactFirstName: input.contactFirstName,
+            contactLastName: input.contactLastName,
+            contactPhone: input.contactPhone,
+            contactEmail: input.contactEmail,
+            emergencyName: input.emergencyName ?? null,
+            emergencyPhone: input.emergencyPhone ?? null,
+            holdExpiresAt: new Date((checkoutExpiresAt + 5 * 60) * 1000),
           });
-        }
+          const insertedBookingId = insertId(insertResult);
+          for (const p of input.passengers) {
+            await tx.insert(passengers).values({
+              bookingId: insertedBookingId,
+              firstName: p.firstName,
+              lastName: p.lastName,
+              outboundSeatType: p.outboundSeatType,
+              returnSeatType: p.returnSeatType,
+              departureId: p.seatNumber ? outbound.id : null,
+              seatNumber: p.seatNumber ?? null,
+              returnDepartureId: p.returnSeatNumber ? ret!.id : null,
+              returnSeatNumber: p.returnSeatNumber ?? null,
+              status: "booked",
+            });
+          }
+          return insertedBookingId;
+        });
         if (!stripeEnabled()) throw new Error("Payments are not configured");
         const session = await getStripe().checkout.sessions.create({
           mode: "payment",
@@ -254,9 +278,25 @@ export const bookingRouter = router({
         await db.update(bookings).set({ stripeCheckoutSessionId: session.id }).where(eq(bookings.id, bookingId));
         return { checkoutUrl: session.url, bookingNumber, bookingId, guestAccessToken: guestAccess?.token ?? null };
       } catch (error) {
-        await releaseHolds(outbound.id, input.passengerCount, outFront);
-        if (ret) await releaseHolds(ret.id, input.passengerCount, retFront);
-        if (bookingId) await db.update(bookings).set({ status: "canceled", holdExpiresAt: null }).where(eq(bookings.id, bookingId));
+        let releasePendingHolds = true;
+        if (bookingId) {
+          releasePendingHolds = await db.transaction(async tx => {
+            const [current] = await tx.select().from(bookings).where(eq(bookings.id, bookingId!)).limit(1).for("update");
+            if (!current || current.status !== "pending_payment") return false;
+            await tx.update(passengers).set({ departureId: null, seatNumber: null, returnDepartureId: null, returnSeatNumber: null })
+              .where(eq(passengers.bookingId, current.id));
+            await tx.update(bookings).set({ status: "canceled", holdExpiresAt: null }).where(eq(bookings.id, current.id));
+            return true;
+          });
+        }
+        if (releasePendingHolds) {
+          await releaseHolds(outbound.id, input.passengerCount, outFront);
+          if (ret) await releaseHolds(ret.id, input.passengerCount, retFront);
+        }
+        if (error instanceof TRPCError) throw error;
+        if (typeof error === "object" && error !== null && "code" in error && error.code === "ER_DUP_ENTRY") {
+          throw new TRPCError({ code: "CONFLICT", message: "A selected seat was just reserved by someone else." });
+        }
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error instanceof Error ? error.message : "Checkout failed" });
       }
     }),

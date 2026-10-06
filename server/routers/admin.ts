@@ -545,8 +545,12 @@ export const adminRouter = router({
       if (booking.returnDepartureId) {
         await restoreSoldSeats(booking.returnDepartureId, booking.passengerCount, booking.returnFrontSeats);
       }
-      await db.update(bookings).set({ status: "refunded" }).where(eq(bookings.id, booking.id));
-      await db.update(tickets).set({ status: "voided" }).where(eq(tickets.bookingId, booking.id));
+      await db.transaction(async tx => {
+        await tx.update(bookings).set({ status: "refunded" }).where(eq(bookings.id, booking.id));
+        await tx.update(passengers).set({ departureId: null, seatNumber: null, returnDepartureId: null, returnSeatNumber: null })
+          .where(eq(passengers.bookingId, booking.id));
+        await tx.update(tickets).set({ status: "voided" }).where(eq(tickets.bookingId, booking.id));
+      });
       if (booking.userId !== null) await notify({
         userId: booking.userId,
         templateKey: TEMPLATES.refund,

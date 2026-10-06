@@ -304,6 +304,8 @@ export const passengers = mysqlTable(
     bookingId: int("bookingId").notNull(),
     departureId: int("departureId"),
     seatNumber: varchar("seatNumber", { length: 10 }),
+    returnDepartureId: int("returnDepartureId"),
+    returnSeatNumber: varchar("returnSeatNumber", { length: 10 }),
     firstName: varchar("firstName", { length: 80 }).notNull(),
     lastName: varchar("lastName", { length: 80 }).notNull(),
     outboundSeatType: mysqlEnum("outboundSeatType", ["standard", "front"])
@@ -318,6 +320,7 @@ export const passengers = mysqlTable(
   table => [
     index("passengers_bookingId_idx").on(table.bookingId),
     uniqueIndex("passengers_departure_seat_unique").on(table.departureId, table.seatNumber),
+    uniqueIndex("passengers_return_departure_seat_unique").on(table.returnDepartureId, table.returnSeatNumber),
   ]
 );
 

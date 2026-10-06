@@ -128,6 +128,8 @@ export async function failTicketPayment(bookingId: number) {
     };
     await release(booking.outboundDepartureId, booking.passengerCount, booking.outboundFrontSeats);
     if (booking.returnDepartureId) await release(booking.returnDepartureId, booking.passengerCount, booking.returnFrontSeats);
+    await tx.update(passengers).set({ departureId: null, seatNumber: null, returnDepartureId: null, returnSeatNumber: null })
+      .where(eq(passengers.bookingId, booking.id));
     await tx.update(bookings).set({ status: "canceled", holdExpiresAt: null }).where(eq(bookings.id, booking.id));
   });
 }
