@@ -17,6 +17,7 @@ function takeSetupToken() {
 export default function AdminSetup() {
   const [token] = useState(takeSetupToken);
   const [, setLocation] = useLocation();
+  const utils = trpc.useUtils();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
@@ -33,6 +34,8 @@ export default function AdminSetup() {
       await setup.mutateAsync({ token, password, confirmPassword });
       setPassword("");
       setConfirmPassword("");
+      sessionStorage.removeItem("metropro-admin-session");
+      await utils.auth.me.invalidate();
       setLocation("/admin/login?setup=complete");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to save this password.");
@@ -43,7 +46,7 @@ export default function AdminSetup() {
     <PageShell>
       <section className="metro-page metro-page--readable flex min-h-[60vh] items-center">
         <div className="mx-auto w-full max-w-lg">
-          <PageIntro eyebrow="Private staff setup" title="Set your admin password" description="This one-time invitation adds password access to the existing administrator account. It does not create another administrator." />
+          <PageIntro eyebrow="Private staff access" title="Set a new admin password" description="This owner-only link sets or resets the password for the existing administrator. Previous password-based sessions end when you save the new password; Apple sign-in remains unchanged." />
           <div className="ticket-card p-5 sm:p-7">
           {!token ? (
             <StatusNotice tone="error">
@@ -66,7 +69,7 @@ export default function AdminSetup() {
               </p>
               {error ? <StatusNotice tone="error">{error}</StatusNotice> : null}
               <Button type="submit" className="min-h-12 w-full" disabled={setup.isPending}>
-                {setup.isPending ? "Saving password…" : "Set admin password"}
+                {setup.isPending ? "Saving password…" : "Save new admin password"}
               </Button>
             </form>
           )}

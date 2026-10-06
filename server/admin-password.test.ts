@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ADMIN_SESSION_MS, ADMIN_SETUP_MS, adminSetupTokenHash, createAdminSetupToken } from "./services/admin-auth";
+import { ADMIN_SESSION_MS, ADMIN_SETUP_MS, adminResetTokenHash, adminSetupTokenHash, createAdminResetToken, createAdminSetupToken } from "./services/admin-auth";
 import { sdk } from "./_core/sdk";
 
 describe("existing-admin password enrollment", () => {
@@ -13,6 +13,16 @@ describe("existing-admin password enrollment", () => {
     expect(adminSetupTokenHash(first.token)).toBe(first.hash);
     expect(adminSetupTokenHash(second.token)).not.toBe(first.hash);
     expect(adminSetupTokenHash("malformed-token")).toBeNull();
+  });
+
+  it("domain-separates reset tokens from older first-time setup invitations", () => {
+    const reset = createAdminResetToken();
+    const setup = createAdminSetupToken();
+    expect(reset.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(reset.hash).toBe(adminResetTokenHash(reset.token));
+    expect(reset.hash).not.toBe(adminSetupTokenHash(reset.token));
+    expect(adminResetTokenHash(setup.token)).not.toBe(setup.hash);
+    expect(adminResetTokenHash("malformed-token")).toBeNull();
   });
 
   it("expires admin password sessions after eight hours and setup links after one day", async () => {

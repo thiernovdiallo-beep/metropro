@@ -12,9 +12,23 @@ export function adminSetupTokenHash(token: string): string | null {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
+// Reuse the existing invite table without granting old enrollment links the
+// authority to replace a password that has already been set.
+export function adminResetTokenHash(token: string): string | null {
+  if (!SETUP_TOKEN_PATTERN.test(token)) return null;
+  return createHash("sha256").update("metropro:admin-password-reset:v1:").update(token, "utf8").digest("hex");
+}
+
 export function createAdminSetupToken() {
   const token = randomBytes(32).toString("base64url");
   const hash = adminSetupTokenHash(token);
   if (!hash) throw new Error("Could not generate an admin setup token");
+  return { token, hash };
+}
+
+export function createAdminResetToken() {
+  const token = randomBytes(32).toString("base64url");
+  const hash = adminResetTokenHash(token);
+  if (!hash) throw new Error("Could not generate an admin reset token");
   return { token, hash };
 }

@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { eq } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { COOKIE_NAME, FIRST_PARTY_HEADER } from "@shared/const";
 import { adminSetupInvites, memberCredentials, users } from "../../drizzle/schema";
@@ -7,7 +7,7 @@ import { getSessionCookieOptions } from "../_core/cookies";
 import { sdk } from "../_core/sdk";
 import { publicProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
-import { adminSetupTokenHash, ADMIN_SESSION_MS } from "../services/admin-auth";
+import { adminResetTokenHash, adminSetupTokenHash, ADMIN_SESSION_MS } from "../services/admin-auth";
 import { throttleAdminAttempt, withAdminHashSlot } from "../services/admin-throttle";
 import { assertMemberAuthOrigin } from "../services/checkout-origin";
 import {
@@ -31,15 +31,17 @@ export const adminAuthRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       assertMemberAuthOrigin(ctx.req.headers.origin, ctx.req.headers["sec-fetch-site"], ctx.req.get(FIRST_PARTY_HEADER));
-      const tokenHash = adminSetupTokenHash(input.token);
-      if (!tokenHash) throw new TRPCError({ code: "BAD_REQUEST", message: INVALID_INVITE });
+      const setupHash = adminSetupTokenHash(input.token);
+      const resetHash = adminResetTokenHash(input.token);
+      if (!setupHash || !resetHash) throw new TRPCError({ code: "BAD_REQUEST", message: INVALID_INVITE });
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Admin setup is unavailable" });
       const [candidate] = await db.select().from(adminSetupInvites)
-        .where(eq(adminSetupInvites.tokenHash, tokenHash)).limit(1);
+        .where(inArray(adminSetupInvites.tokenHash, [setupHash, resetHash])).limit(1);
       if (!candidate || candidate.consumedAt || candidate.expiresAt <= new Date()) {
         throw new TRPCError({ code: "BAD_REQUEST", message: INVALID_INVITE });
       }
+      const isReset = candidate.tokenHash === resetHash;
       let passwordHash: string;
       try {
         passwordHash = await withAdminHashSlot(() => hashMemberPassword(input.password));
@@ -50,21 +52,34 @@ export const adminAuthRouter = router({
       await db.transaction(async tx => {
         const [invite] = await tx.select().from(adminSetupInvites)
           .where(eq(adminSetupInvites.id, candidate.id)).limit(1).for("update");
-        if (!invite || invite.consumedAt || invite.expiresAt <= new Date()) {
+        if (!invite || invite.tokenHash !== candidate.tokenHash || invite.consumedAt || invite.expiresAt <= new Date()) {
           throw new TRPCError({ code: "BAD_REQUEST", message: INVALID_INVITE });
         }
         const [admin] = await tx.select().from(users)
           .where(eq(users.id, invite.userId)).limit(1).for("update");
-        const [existing] = await tx.select({ id: memberCredentials.id }).from(memberCredentials)
-          .where(eq(memberCredentials.userId, invite.userId)).limit(1);
-        if (!admin || admin.role !== "admin" || !admin.email || existing) {
+        const activeAdmins = await tx.select({ id: users.id }).from(users)
+          .where(eq(users.role, "admin")).for("update");
+        const [existing] = await tx.select({ id: memberCredentials.id, emailNormalized: memberCredentials.emailNormalized }).from(memberCredentials)
+          .where(eq(memberCredentials.userId, invite.userId)).limit(1).for("update");
+        if (!admin || admin.role !== "admin" || !admin.email || activeAdmins.length !== 1 ||
+            activeAdmins[0].id !== admin.id || Boolean(existing) !== isReset ||
+            (existing && existing.emailNormalized !== normalizeMemberEmail(admin.email))) {
           throw new TRPCError({ code: "BAD_REQUEST", message: INVALID_INVITE });
         }
-        await tx.insert(memberCredentials).values({
-          userId: admin.id,
-          emailNormalized: normalizeMemberEmail(admin.email),
-          passwordHash,
-        });
+        if (existing) {
+          await tx.update(memberCredentials).set({
+            passwordHash,
+            sessionVersion: sql`${memberCredentials.sessionVersion} + 1`,
+            failedAttempts: 0,
+            lockedUntil: null,
+          }).where(eq(memberCredentials.id, existing.id));
+        } else {
+          await tx.insert(memberCredentials).values({
+            userId: admin.id,
+            emailNormalized: normalizeMemberEmail(admin.email),
+            passwordHash,
+          });
+        }
         await tx.update(adminSetupInvites).set({ consumedAt: new Date() })
           .where(eq(adminSetupInvites.id, invite.id));
       });
@@ -100,7 +115,13 @@ export const adminAuthRouter = router({
           .where(eq(memberCredentials.id, credential.id)).limit(1).for("update");
         const [currentAdmin] = await tx.select({ role: users.role }).from(users)
           .where(eq(users.id, credential.userId)).limit(1);
-        if (!fresh || currentAdmin?.role !== "admin") {
+        // Hash verification happened before this lock. A concurrent password
+        // reset may have replaced that hash and bumped the session version;
+        // never mint a new-version session from the old verified password.
+        if (!fresh || currentAdmin?.role !== "admin" ||
+            fresh.passwordHash !== credential.passwordHash ||
+            fresh.sessionVersion !== credential.sessionVersion ||
+            fresh.emailNormalized !== email) {
           throw new TRPCError({ code: "UNAUTHORIZED", message: INVALID_LOGIN });
         }
         await tx.update(memberCredentials).set({ failedAttempts: 0, lockedUntil: null })
