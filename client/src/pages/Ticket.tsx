@@ -39,7 +39,7 @@ export default function Ticket() {
         <PageIntro eyebrow="Metro Pro" title="Digital ticket" description="Present this ticket and QR code when boarding." />
         <div className="mx-auto max-w-md">
           <article className="ticket-card overflow-hidden" aria-label="Digital boarding ticket">
-            <div className="border-b border-border bg-gradient-to-r from-[#e6f6f9] to-white px-5 py-4 text-foreground">
+            <div className="border-b border-border bg-gradient-to-r from-secondary to-white px-5 py-4 text-foreground">
               <Wordmark />
             </div>
             <div className="space-y-4 p-5">

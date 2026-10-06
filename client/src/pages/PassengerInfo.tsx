@@ -200,7 +200,7 @@ export default function PassengerInfo() {
                 ) : null}
                 {hasMembership ? (
                   <label className="flex items-start gap-3 rounded-xl bg-secondary/70 p-3 text-sm leading-relaxed">
-                    <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-[#137a86]" checked={person.isMemberTraveler}
+                    <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-primary" checked={person.isMemberTraveler}
                       disabled={!person.isMemberTraveler && travelers.some(traveler => traveler.isMemberTraveler)}
                       onChange={e => updateTraveler(index, { isMemberTraveler: e.target.checked })} />
                     <span>This passenger is me, the member. Only my regular seat is {money(member)}; my front seat remains {money(front)}.</span>

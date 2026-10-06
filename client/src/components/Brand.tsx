@@ -5,17 +5,11 @@ import React, { Children, isValidElement, useState } from "react";
 import { Link, useLocation } from "wouter";
 
 export function LogoMark({ className = "h-9 w-9" }: { className?: string }) {
-  return <img src="/logo.png" alt="Metro Pro" className={`${className} shrink-0 rounded-none object-cover`} />;
+  return <img src="/favicon.png" alt="Metro Pro" className={`${className} shrink-0 object-contain`} />;
 }
 
-export function Wordmark() {
-  return <div className="flex items-center gap-2.5">
-    <LogoMark />
-    <div className="leading-none">
-      <div className="font-serif text-lg tracking-tight text-primary">METRO</div>
-      <div className="text-[10px] font-semibold tracking-[0.28em] text-accent">PRO</div>
-    </div>
-  </div>;
+export function Wordmark({ className = "h-9 w-auto max-w-[220px]" }: { className?: string }) {
+  return <img src="/logo.png" alt="Metro Pro" className={`${className} block shrink-0 object-contain`} />;
 }
 
 type NavItem = { label: string; href: string; active: boolean };
@@ -103,7 +97,7 @@ function FooterGroup({ title, links }: { title: string; links: [string, string][
 export function SiteFooter() {
   const [location] = useLocation();
   if (location.startsWith("/admin") || location.startsWith("/driver")) return null;
-  return <footer className="mt-auto border-t border-border bg-[#f7f8fa] text-foreground">
+  return <footer className="mt-auto border-t border-border bg-background text-foreground">
     <div className="container grid gap-8 py-12 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr] lg:py-14">
       <div><Wordmark /><p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">Scheduled passenger-van journeys between New York City and Columbus, Ohio. Clear booking, assigned seats and digital tickets.</p></div>
       <FooterGroup title="Metro Pro" links={[["About Us", "/#why-metro-pro"], ["Contact", "/#contact"], ["Membership", "/membership"]]} />

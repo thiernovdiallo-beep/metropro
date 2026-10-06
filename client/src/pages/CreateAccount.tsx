@@ -53,7 +53,7 @@ export default function CreateAccount() {
 
   return (
     <PageShell>
-      <section className="bg-gradient-to-br from-[#e8f6fb] via-[#f6fbfd] to-[#e9f6ef]">
+      <section className="bg-gradient-to-br from-background via-white to-secondary">
         <div className="metro-page metro-page--wide grid min-w-0 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.88fr)] lg:items-start lg:gap-12">
           <div className="min-w-0 lg:pt-6">
             <PageIntro
@@ -97,7 +97,7 @@ export default function CreateAccount() {
               <Label className="metro-form-label" htmlFor="signup-confirm-password">Confirm password *</Label>
               <Input id="signup-confirm-password" type="password" autoComplete="new-password" minLength={12} className="metro-control" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
             </div>
-            <div className="form-field min-w-0 rounded-xl border border-dashed border-primary/35 bg-[#f4fbfd] p-4">
+            <div className="form-field min-w-0 rounded-xl border border-dashed border-primary/35 bg-background p-4">
               <Label className="metro-form-label" htmlFor="signup-id">Picture of your ID *</Label>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Choose a JPEG, PNG or WebP photo up to 25 MB (HEIC if your browser supports it). We resize and compress it on your device before securely uploading an image under 2 MB. Make sure the ID text is clear.</p>
               <Input id="signup-id" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" className="metro-control mt-3 h-auto min-w-0 py-2" required onChange={e => setPhoto(e.target.files?.[0] ?? null)} />

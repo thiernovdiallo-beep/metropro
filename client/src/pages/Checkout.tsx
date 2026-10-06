@@ -155,7 +155,7 @@ export default function Checkout() {
             <div className="border-t border-border pt-5 text-sm"><p className="font-semibold">Booking contact</p><p>{draft.contactFirstName} {draft.contactLastName} · {draft.phone}</p><p className="break-all">{draft.email}</p></div>
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-5 text-lg font-semibold">
               <span>Total for {pax} passenger{pax === 1 ? "" : "s"}</span>
-              <span className="price-copper text-2xl">{money(q.amountCents)}</span>
+              <span className="fare-price text-2xl">{money(q.amountCents)}</span>
             </div>
             <p className="text-xs leading-relaxed text-muted-foreground">
               Only the traveling member's own regular seat qualifies for $100. Front passenger seats are always $200.

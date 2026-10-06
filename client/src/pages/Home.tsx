@@ -135,7 +135,7 @@ export default function Home() {
 
   return (
     <PageShell>
-      <section className="relative h-[340px] overflow-hidden bg-[#173e49] text-white sm:h-[440px] lg:h-[640px]" aria-labelledby="home-hero-title">
+      <section className="relative h-[340px] overflow-hidden bg-[#0B1F3A] text-white sm:h-[440px] lg:h-[640px]" aria-labelledby="home-hero-title">
         <img
           src="/manus-storage/async-images/tDmJ4PSy5Hs9geolWVIGfD/image-1.webp"
           alt=""
@@ -144,10 +144,10 @@ export default function Home() {
           fetchPriority="high"
           decoding="async"
         />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,35,44,0.85)_0%,rgba(8,35,44,0.56)_47%,rgba(8,35,44,0.34)_100%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(11,31,58,0.85)_0%,rgba(11,31,58,0.56)_47%,rgba(11,31,58,0.34)_100%)]" />
         <div className="container relative flex h-full items-start pt-9 sm:pt-16 lg:pt-28">
           <div className="max-w-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.23em] text-[#b1e3e5]">Travel with Metro Pro</p>
+            <p className="text-xs font-bold uppercase tracking-[0.23em] text-[#38BDF8]">Travel with Metro Pro</p>
             <h1 id="home-hero-title" className="mt-4 max-w-xl font-serif text-[2.3rem] leading-[1.08] tracking-tight sm:text-5xl lg:text-[3.75rem]">Travel comfortably.<br />Arrive confidently.</h1>
             <p className="mt-4 max-w-md text-base leading-relaxed text-white/90 sm:text-lg">Safe, comfortable and reliable journeys to your destination.</p>
             <p className="mt-4 text-sm font-medium text-white/80">New York City ↔ Columbus, Ohio</p>
@@ -160,11 +160,11 @@ export default function Home() {
           <form id="trip-search" onSubmit={search} className="ticket-card scroll-mt-24 px-5 py-6 sm:px-7 sm:py-7" aria-label="Search Metro Pro departures">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-serif text-2xl font-bold">Book your journey</h2>
-              <p className="text-xs font-medium text-[#667085]">{isAuthenticated ? "Your trip will be saved to your account" : "Guest booking · No sign-in needed"}</p>
+              <p className="text-xs font-medium text-muted-foreground">{isAuthenticated ? "Your trip will be saved to your account" : "Guest booking · No sign-in needed"}</p>
             </div>
-            <div className="mt-5 flex gap-5 border-b border-[#e4e7ec] text-sm font-bold" role="group" aria-label="Trip type">
-              <button type="button" aria-pressed={tripType === "one_way"} className={`min-h-11 border-b-2 px-1 ${tripType === "one_way" ? "border-primary text-primary" : "border-transparent text-[#667085]"}`} onClick={() => setTripType("one_way")}>One way</button>
-              <button type="button" aria-pressed={tripType === "round_trip"} className={`min-h-11 border-b-2 px-1 ${tripType === "round_trip" ? "border-primary text-primary" : "border-transparent text-[#667085]"}`} onClick={() => setTripType("round_trip")}>Round trip</button>
+            <div className="mt-5 flex gap-5 border-b border-border text-sm font-bold" role="group" aria-label="Trip type">
+              <button type="button" aria-pressed={tripType === "one_way"} className={`min-h-11 border-b-2 px-1 ${tripType === "one_way" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`} onClick={() => setTripType("one_way")}>One way</button>
+              <button type="button" aria-pressed={tripType === "round_trip"} className={`min-h-11 border-b-2 px-1 ${tripType === "round_trip" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`} onClick={() => setTripType("round_trip")}>Round trip</button>
             </div>
             <div className="mt-5 grid min-w-0 items-end gap-4 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.65fr)]">
               <div className="form-field">
@@ -195,7 +195,7 @@ export default function Home() {
                   <Label htmlFor="trip-return" className="metro-form-label">Return date</Label>
                   <Input id="trip-return" type="date" min={departDate} className="h-12 bg-white" value={returnDate} onChange={event => setReturnDate(event.target.value)} required />
                 </div>
-              ) : <p className="text-sm text-[#667085]">Select your exact seat after choosing a departure.</p>}
+              ) : <p className="text-sm text-muted-foreground">Select your exact seat after choosing a departure.</p>}
               <Button type="submit" className="h-12 w-full px-7 text-sm font-bold uppercase tracking-wide sm:w-auto" disabled={routesLoading || routesUnavailable || !origin || !dest || origin === dest || !routes.length || (tripType === "round_trip" && !routes.some(route => route.originCityId === dest && route.destinationCityId === origin))}>
                 <Search size={17} className="mr-2" aria-hidden="true" /> Search trips
               </Button>
@@ -205,19 +205,19 @@ export default function Home() {
         </div>
       </div>
 
-      <section className="bg-[#f7f8fa] py-12" aria-label="Find a booking or sign in">
+      <section className="bg-background py-12" aria-label="Find a booking or sign in">
         <div className="container grid gap-6 lg:grid-cols-2">
           <div id="booking-lookup" className="ticket-card scroll-mt-24 p-6">
             <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-primary"><LockKeyhole size={17} aria-hidden="true" /> Your trip details</p>
             <h2 className="mt-3 font-serif text-2xl">Already have a booking?</h2>
-            <p className="mt-2 text-sm leading-relaxed text-[#667085]">Enter your booking reference. Guest bookings not in your account also require the private access code from your checkout link.</p>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Enter your booking reference. Guest bookings not in your account also require the private access code from your checkout link.</p>
             <form onSubmit={findBooking} className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
               <div className="form-field">
                 <Label htmlFor="booking-reference">Booking reference</Label>
                 <Input id="booking-reference" placeholder="Enter booking reference" autoComplete="off" value={bookingReference} onChange={event => setBookingReference(event.target.value)} maxLength={24} className="h-12 bg-white" required />
               </div>
               <Button type="submit" disabled={lookupPending} className="h-12 px-5 text-sm font-bold uppercase tracking-wide">{lookupPending ? "Looking up…" : "Find my booking"}</Button>
-              <div className="form-field sm:col-span-2"><Label htmlFor="booking-access">Private access code <span className="font-normal text-[#667085]">(for guest bookings not in your account)</span></Label><Input id="booking-access" value={privateAccess} onChange={event => setPrivateAccess(event.target.value)} maxLength={128} autoComplete="off" className="h-12 bg-white" /></div>
+              <div className="form-field sm:col-span-2"><Label htmlFor="booking-access">Private access code <span className="font-normal text-muted-foreground">(for guest bookings not in your account)</span></Label><Input id="booking-access" value={privateAccess} onChange={event => setPrivateAccess(event.target.value)} maxLength={128} autoComplete="off" className="h-12 bg-white" /></div>
               {lookupError ? <p role="alert" className="text-sm text-destructive sm:col-span-2">{lookupError}</p> : null}
             </form>
           </div>

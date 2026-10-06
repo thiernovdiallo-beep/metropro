@@ -317,7 +317,7 @@ function Receipts() {
             </span>
             <span>{moneyExact(p.amountCents)}</span>
             {genuineStripeReceiptUrl(p.receiptUrl) ? (
-              <a href={genuineStripeReceiptUrl(p.receiptUrl)!} className="text-accent" target="_blank" rel="noreferrer">
+              <a href={genuineStripeReceiptUrl(p.receiptUrl)!} className="text-primary" target="_blank" rel="noreferrer">
                 Receipt
               </a>
             ) : null}
@@ -469,7 +469,7 @@ function Settings({
           <Label className="metro-form-label" htmlFor="member-phone">Phone number *</Label>
           <Input id="member-phone" type="tel" className="metro-control" autoComplete="tel" value={tel} onChange={e => setTel(e.target.value)} required />
         </div>
-        <div className="min-w-0 rounded-xl border border-dashed border-primary/35 bg-[#f4fbfd] p-4">
+        <div className="min-w-0 rounded-xl border border-dashed border-primary/35 bg-background p-4">
           <Label className="metro-form-label" htmlFor="member-id">Picture of your ID *</Label>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Choose a JPEG, PNG or WebP photo up to 25 MB (HEIC if supported). It is resized and compressed on your device before an under-2-MB encrypted upload. Make sure the ID text is clear.</p>
           <Input id="member-id" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" className="metro-control mt-3 h-auto min-w-0 py-2" required={!profile.data?.idPhotoUploadedAt}

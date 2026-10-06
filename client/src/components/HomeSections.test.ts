@@ -51,6 +51,8 @@ describe("Metro Pro homepage marketing sections", () => {
     expect(html).toContain("New York City → Columbus");
     expect(html).toContain("not valid for boarding");
     expect(html).toContain("QR code appears on a confirmed ticket");
+    expect(html).toContain('src="/logo.png"');
+    expect(html).toContain('alt="Metro Pro"');
     expect(html).not.toContain("qrToken");
   });
 });
