@@ -1,6 +1,6 @@
 {
   "routes": [
-    { "path": "/", "title": "Metro Pro · Member login or guest booking" },
+    { "path": "/", "title": "Book your trip · Metro Pro" },
     { "path": "/create-account", "title": "Create a Metro Pro member account" },
     { "path": "/search", "title": "Departures" },
     { "path": "/book", "title": "Passenger information" },
