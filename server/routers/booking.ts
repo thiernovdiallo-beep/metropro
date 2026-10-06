@@ -10,6 +10,8 @@ import { assertBookable, holdSeats, releaseHolds } from "../services/inventory";
 import { getMemberProfileStatus } from "../services/member-profile";
 import { frontCount, legFareCents, seatFareCents, validateSeatSelections, type SeatSelection } from "../services/pricing";
 import { getSettings } from "../services/policies";
+import { getSeatAvailability } from "../services/seat-inventory";
+import { throttleSeatMap } from "../services/seat-map-rate-limit";
 import { makeBookingNumber } from "../services/tickets";
 import { getStripe, stripeEnabled } from "../stripe/client";
 import { ticketLineItem } from "../stripe/products";
@@ -67,6 +69,26 @@ function lineItemsForLeg(departure: DepartureDetails, selections: SeatSelection[
 }
 
 export const bookingRouter = router({
+  getSeatMap: publicProcedure
+    .input(z.object({ departureId: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      const clientKey = ctx.user
+        ? `user:${ctx.user.id}`
+        : `guest:${ctx.req.ip ?? ctx.req.socket?.remoteAddress ?? "unknown"}`;
+      throttleSeatMap(clientKey);
+      try {
+        const seats = await getSeatAvailability(input.departureId);
+        // Explicitly select public fields, even if the service gains internal data later.
+        return seats.map(({ seatNumber, seatType, status, priceCents }) => ({
+          seatNumber, seatType, status, priceCents,
+        }));
+      } catch (error) {
+        if (error instanceof Error && error.message === "Departure not found") {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Departure not found" });
+        }
+        throw error;
+      }
+    }),
   quote: publicProcedure
     .input(selectionInput)
     .query(async ({ ctx, input }) => {
