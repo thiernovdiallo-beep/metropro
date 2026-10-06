@@ -27,7 +27,7 @@ export function validateSeatSelections(
   hasActiveMembership: boolean,
   memberName: string | null
 ) {
-  if (!passengers.length || passengers.length > 10) throw new Error("Select between 1 and 10 passengers.");
+  if (!passengers.length || passengers.length > 11) throw new Error("Select between 1 and 11 passengers.");
   if (frontCount(passengers, "outbound") > 1 || frontCount(passengers, "return") > 1) {
     throw new Error("Only one front passenger seat is available per departure.");
   }

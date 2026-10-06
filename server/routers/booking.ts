@@ -33,8 +33,8 @@ const passengerSchema = z.object({
 const selectionInput = z.object({
   outboundDepartureId: z.number().int().positive(),
   returnDepartureId: z.number().int().positive().nullable(),
-  passengerCount: z.number().int().min(1).max(12),
-  passengers: z.array(passengerSchema).min(1).max(12),
+  passengerCount: z.number().int().min(1).max(11),
+  passengers: z.array(passengerSchema).min(1).max(11),
 });
 
 type DepartureDetails = NonNullable<Awaited<ReturnType<typeof loadPricedDeparture>>>;

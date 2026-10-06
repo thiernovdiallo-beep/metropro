@@ -41,7 +41,7 @@ export default function SearchResults() {
   const returnDate = params.get("return");
   const pax = Number(params.get("pax") ?? 1);
   const type = params.get("type") === "round_trip" ? "round_trip" : "one_way";
-  const valid = origin > 0 && dest > 0 && origin !== dest && /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isInteger(pax) && pax >= 1 && pax <= 12 &&
+  const valid = origin > 0 && dest > 0 && origin !== dest && /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isInteger(pax) && pax >= 1 && pax <= 11 &&
     (type !== "round_trip" || Boolean(returnDate && /^\d{4}-\d{2}-\d{2}$/.test(returnDate) && returnDate >= date));
   const { user } = useAuth();
   const memberQ = trpc.account.overview.useQuery(undefined, { enabled: Boolean(user) });
@@ -89,7 +89,7 @@ export default function SearchResults() {
       actions={<Button variant="outline" className="min-h-11" onClick={() => setEditing(value => !value)} aria-expanded={editing} aria-controls="modify-search">Modify search</Button>} />
     {editing ? <form id="modify-search" className="ticket-card grid min-w-0 gap-4 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-4" onSubmit={event => {
       event.preventDefault();
-      if (!destinations.some(route => route.destinationCityId === to) || !travelDate || travelers < 1 || travelers > 12 || (tripType === "round_trip" && (!backDate || backDate < travelDate))) return;
+      if (!destinations.some(route => route.destinationCityId === to) || !travelDate || travelers < 1 || travelers > 11 || (tripType === "round_trip" && (!backDate || backDate < travelDate))) return;
       setLocation(searchUrl({ origin: from, dest: to, date: travelDate, pax: travelers, type: tripType, returnDate: backDate }));
       setEditing(false);
     }}>
@@ -100,7 +100,7 @@ export default function SearchResults() {
         {destinations.map(route => <option key={route.id} value={route.destinationCityId}>{route.destination?.name}</option>)}
       </select></label>
       <label className="grid min-w-0 gap-2"><span className="metro-form-label">Departure date</span><Input className="metro-control" type="date" min={isoDate()} value={travelDate} onChange={event => setTravelDate(event.target.value)} required /></label>
-      <label className="grid min-w-0 gap-2"><span className="metro-form-label">Passengers</span><Input className="metro-control" type="number" min={1} max={12} value={travelers} onChange={event => setTravelers(Number(event.target.value))} required /></label>
+      <label className="grid min-w-0 gap-2"><span className="metro-form-label">Passengers</span><Input className="metro-control" type="number" min={1} max={11} value={travelers} onChange={event => setTravelers(Number(event.target.value))} required /></label>
       <label className="grid min-w-0 gap-2"><span className="metro-form-label">Trip type</span><select className="metro-control" value={tripType} onChange={event => setTripType(event.target.value as "one_way" | "round_trip")}><option value="one_way">One way</option><option value="round_trip">Round trip</option></select></label>
       {tripType === "round_trip" ? <label className="grid min-w-0 gap-2"><span className="metro-form-label">Return date</span><Input className="metro-control" type="date" min={travelDate || isoDate()} value={backDate} onChange={event => setBackDate(event.target.value)} required /></label> : null}
       <Button type="submit" className="min-h-12 self-end">Update results</Button>

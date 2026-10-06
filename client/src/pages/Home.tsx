@@ -186,7 +186,7 @@ export default function Home() {
               </div>
               <div className="form-field">
                 <Label htmlFor="trip-passengers" className="metro-form-label">Passengers</Label>
-                <Input id="trip-passengers" type="number" min={1} max={12} className="h-12 w-full bg-white" value={passengers} onChange={event => setPassengers(Number(event.target.value))} required />
+                <Input id="trip-passengers" type="number" min={1} max={11} className="h-12 w-full bg-white" value={passengers} onChange={event => setPassengers(Number(event.target.value))} required />
               </div>
             </div>
             <div className="mt-5 flex flex-wrap items-end justify-between gap-4">

@@ -363,8 +363,8 @@ export const accountRouter = router({
       bookingId: z.number().int().positive(),
       newOutboundDepartureId: z.number().int().positive(),
       newReturnDepartureId: z.number().int().positive().nullable(),
-      outboundSeats: z.array(z.string().min(1).max(10)).min(1).max(12),
-      returnSeats: z.array(z.string().min(1).max(10)).max(12).nullable(),
+      outboundSeats: z.array(z.string().min(1).max(10)).min(1).max(11),
+      returnSeats: z.array(z.string().min(1).max(10)).max(11).nullable(),
     }))
     .mutation(({ ctx, input }) => rescheduleWithNumberedSeats(input, ctx.user.id)),
   startMembershipCheckout: protectedProcedure

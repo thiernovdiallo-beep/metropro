@@ -35,6 +35,7 @@ import { changesBookedItinerary } from "../services/route-safety";
 import { rescheduleWithNumberedSeats } from "../services/rescheduling";
 import { beginBookingRefund, reconcilePendingRefunds, submitRefundIntent } from "../services/refund-lifecycle";
 import { assertDriverAssignable, assertVehicleAssignable } from "../services/dispatch";
+import { planVehicleCapacityRetune } from "../services/vehicle-capacity";
 import { allocatePaidAcrossLegs } from "../services/pricing";
 import { TEMPLATES, notify } from "../services/notifications";
 import { DEFAULT_SETTINGS, getSettings, saveSettings, type AppSettings } from "../services/policies";
@@ -122,8 +123,8 @@ export const adminRouter = router({
   rescheduleBooking: adminProcedure.input(z.object({
     bookingId: z.number().int().positive(), newOutboundDepartureId: z.number().int().positive(),
     newReturnDepartureId: z.number().int().positive().nullable(),
-    outboundSeats: z.array(z.string().min(1).max(10)).min(1).max(12),
-    returnSeats: z.array(z.string().min(1).max(10)).max(12).nullable(),
+    outboundSeats: z.array(z.string().min(1).max(10)).min(1).max(11),
+    returnSeats: z.array(z.string().min(1).max(10)).max(11).nullable(),
   })).mutation(async ({ ctx, input }) => {
     const result = await rescheduleWithNumberedSeats(input, ctx.user.id, true);
     try { await writeAudit(ctx.user.id, "booking.reschedule", "booking", input.bookingId, {
@@ -357,11 +358,10 @@ export const adminRouter = router({
           if (existing.capacity !== input.capacity) {
             const assigned = await tx.select().from(departures).where(eq(departures.vehicleId, existing.id))
               .orderBy(departures.id).for("update");
-            const future = assigned.filter(dep => dep.departAt > new Date() && dep.status !== "canceled" && dep.status !== "completed");
-            if (future.some(dep => dep.status !== "scheduled" || dep.seatsSold > 0 || dep.seatsHeld > 0)) {
-              throw new TRPCError({ code: "CONFLICT", message: "This van has booked or active future departures. Assign another vehicle or wait until those trips finish before changing its seat capacity." });
-            }
-            for (const dep of future) await tx.update(departures).set({ capacity: input.capacity }).where(eq(departures.id, dep.id));
+            let retune: number[];
+            try { retune = planVehicleCapacityRetune(assigned, input.capacity, new Date()); }
+            catch (error) { throw new TRPCError({ code: "CONFLICT", message: error instanceof Error ? error.message : "A booked or active trip cannot lose its seats." }); }
+            for (const departureId of retune) await tx.update(departures).set({ capacity: input.capacity }).where(eq(departures.id, departureId));
           }
           await tx.update(vehicles).set({
             code: input.code, vin: input.vin ?? null, make: input.make, model: input.model,

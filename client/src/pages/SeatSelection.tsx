@@ -30,7 +30,7 @@ export default function SeatSelection() {
   const out = Number(params.get("out"));
   const ret = Number(params.get("ret"));
   const requestedPax = Number(params.get("pax") ?? 1);
-  const valid = out > 0 && Number.isInteger(requestedPax) && requestedPax >= 1 && requestedPax <= 12;
+  const valid = out > 0 && Number.isInteger(requestedPax) && requestedPax >= 1 && requestedPax <= 11;
   const pax = valid ? requestedPax : 1;
   const previous = useMemo(() => valid ? initialDraft(out, ret, pax) : null, [out, ret, pax, valid]);
   const [outSeats, setOutSeats] = useState<(string | undefined)[]>(() => Array.from({ length: pax }, (_, index) => previous?.passengers?.[index]?.seatNumber));

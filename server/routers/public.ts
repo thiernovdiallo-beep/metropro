@@ -100,7 +100,7 @@ export const publicRouter = router({
         originCityId: z.number(),
         destinationCityId: z.number(),
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-        passengers: z.number().int().min(1).max(12),
+        passengers: z.number().int().min(1).max(11),
         isMember: z.boolean().optional(),
       })
     )

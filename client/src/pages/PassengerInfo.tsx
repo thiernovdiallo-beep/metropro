@@ -53,7 +53,7 @@ export default function PassengerInfo() {
   const roundTrip = Boolean(retId);
   const outMap = trpc.booking.getSeatMap.useQuery({ departureId: outId }, { enabled: outId > 0, refetchInterval: 15_000, refetchOnWindowFocus: true });
   const retMap = trpc.booking.getSeatMap.useQuery({ departureId: retId }, { enabled: roundTrip, refetchInterval: 15_000, refetchOnWindowFocus: true });
-  const pax = Math.min(12, Math.max(1, Number(params.get("pax") ?? 1) || 1));
+  const pax = Math.min(11, Math.max(1, Number(params.get("pax") ?? 1) || 1));
   const previous = useMemo(() => {
     try {
       const raw = sessionStorage.getItem("metropro-booking");

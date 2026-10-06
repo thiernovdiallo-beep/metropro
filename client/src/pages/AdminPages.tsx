@@ -79,7 +79,7 @@ export function AdminFleet() {
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
   const [year, setYear] = useState(new Date().getFullYear());
-  const [capacity, setCapacity] = useState(10);
+  const [capacity, setCapacity] = useState(11);
   const [mileage, setMileage] = useState(0);
   const [vin, setVin] = useState("");
   const [status, setStatus] = useState<"available" | "maintenance" | "out_of_service">("available");
@@ -102,6 +102,7 @@ export function AdminFleet() {
           ))}</div>
         </ResourceState></div>
         <h2 className="metro-section-title mt-8">Add vehicle</h2>
+        <p className="mt-2 text-sm text-muted-foreground">For a 12-place van, enter 11 paying passenger seats. The driver is not part of sellable capacity.</p>
         <form
           className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
           onSubmit={e => {
@@ -188,7 +189,7 @@ export function AdminVehicle() {
             insuranceExpiresAt: insurance === null ? undefined : insurance || null,
             inspectionExpiresAt: inspection === null ? undefined : inspection || null,
           }); }}>
-            <StatusNotice className="sm:col-span-2 lg:col-span-3">Capacity changes update only empty future scheduled departures. Booked/active departures retain their seat assignments; use another vehicle or finish those trips first.</StatusNotice>
+            <StatusNotice className="sm:col-span-2 lg:col-span-3">A 12-place van has 11 paying passenger seats plus the driver. Capacity changes update only empty future scheduled departures. Booked trips keep their original seat maps; reducing capacity below a booked trip is blocked.</StatusNotice>
             <label className="form-field">Make<Input required value={make ?? v.make} onChange={event => setMake(event.target.value)} /></label>
             <label className="form-field">Model<Input required value={model ?? v.model} onChange={event => setModel(event.target.value)} /></label>
             <label className="form-field">Year<Input className="metro-control" required type="number" min={1990} max={new Date().getFullYear() + 2} value={year ?? v.year} onChange={event => setYear(Number(event.target.value))} /></label>

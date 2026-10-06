@@ -53,6 +53,21 @@ describe("standalone SeatMap", () => {
     expect(html).toContain("Choose a seat");
   });
 
+  it("shows 11 selectable passenger positions plus a non-bookable driver with a blue center seat", () => {
+    mock.seats = getSeatLayout(11).map((seat: SeatPosition) => ({
+      seatNumber: seat.seatNumber, seatType: seat.seatType, status: "available" as const,
+      priceCents: seat.seatType === "front" ? 20000 : 15000,
+    }));
+    const html = render(["3M", null]);
+    expect(html).toContain("11 passenger seats + driver");
+    expect(html).toContain('aria-label="Driver seat, not bookable"');
+    expect(html).toContain('aria-label="Middle seat 3M, selected, $150, passenger 1"');
+    expect(html).toContain('aria-label="Middle row with center seat"');
+    expect(html).toMatch(/aria-label="Middle seat 3M, selected, \$150, passenger 1"[^>]*metro-seat--selected/);
+    expect(html.match(/aria-pressed=/g)).toHaveLength(11);
+    expect(html).not.toContain('aria-label="Seat 3M, blocked"');
+  });
+
   it("uses grey blocked seats for missing live data and prevents false hold countdowns", () => {
     mock.seats = mock.seats.map(seat => seat.seatNumber === "5B" ? { ...seat, seatNumber: "Unknown" } : seat);
     const html = render();

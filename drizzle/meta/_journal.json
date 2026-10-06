@@ -113,6 +113,13 @@
       "when": 1791299263987,
       "tag": "0015_plain_chronomancer",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1791300935335,
+      "tag": "0016_chubby_pete_wisdom",
+      "breakpoints": true
     }
   ]
 }

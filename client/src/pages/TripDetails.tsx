@@ -16,7 +16,7 @@ export default function TripDetails() {
   const outbound = trpc.public.departure.useQuery({ id: outboundId }, { enabled: outboundId > 0 });
   const inbound = trpc.public.departure.useQuery({ id: returnId }, { enabled: returnId > 0 });
   const back = params.get("search") ? `/search?${params.get("search")}` : "/";
-  const canContinue = outbound.data && (!returnId || inbound.data) && count >= 1 && count <= 12 &&
+  const canContinue = outbound.data && (!returnId || inbound.data) && count >= 1 && count <= 11 &&
     outbound.data.seatsRemaining >= count && [outbound.data, ...(returnId ? [inbound.data] : [])].every(trip => trip && trip.seatsRemaining >= count && ["scheduled", "boarding", "delayed"].includes(trip.status));
   const loading = outbound.isLoading || (returnId && inbound.isLoading);
   return <PageShell><main className="metro-page metro-page--readable">

@@ -69,6 +69,7 @@ export default function SeatMap({
   );
   const seats = seatMap.data;
   const layout = useMemo(() => getSeatLayout(seats?.length ?? 10), [seats?.length]);
+  const elevenPassengerVan = layout.length === 11;
   const seatsByNumber = useMemo(() => new Map(seats?.map(seat => [seat.seatNumber, seat]) ?? []), [seats]);
   const selectedByNumber = useMemo(() => {
     const entries = selectedSeats.slice(0, Math.max(0, passengerCount))
@@ -132,7 +133,7 @@ export default function SeatMap({
     const info = seatMap.isError ? undefined : seatsByNumber.get(seat.seatNumber);
     const assignedIndex = selectedByNumber.get(seat.seatNumber);
     const state: SeatStatus = !info ? "blocked" : assignedIndex !== undefined && info.status === "available" ? "selected" : info.status;
-    const label = seat.seatType === "front" ? "Front passenger seat" : `Seat ${seat.label}`;
+    const label = seat.seatType === "front" ? "Front passenger seat" : seat.seatNumber === "3M" ? "Middle seat 3M" : `Seat ${seat.label}`;
     const description = `${label}, ${state}${info ? `, ${money(info.priceCents)}` : ""}${assignedIndex !== undefined && state === "selected" ? `, passenger ${assignedIndex + 1}` : ""}`;
     return (
       <button
@@ -174,17 +175,43 @@ export default function SeatMap({
 
       {seatMap.isLoading ? <div role="status" className="mx-auto mt-5 flex min-h-56 w-full max-w-[320px] items-center justify-center rounded-[2rem] border-2 border-border bg-background px-4 text-center text-sm text-muted-foreground">Loading live seats…</div>
         : !seatMap.isError && seats?.length === 0 ? <div role="status" className="metro-notice mx-auto mt-5 max-w-[320px] text-center">No seats are available for this departure. Please choose another trip or refresh availability.</div>
-        : <div className="mx-auto mt-5 w-full max-w-[320px] rounded-[2rem] border-2 border-border bg-background px-3 py-5 shadow-inner sm:px-5">
+        : <div className={`mx-auto mt-5 w-full rounded-[2rem] border-2 border-border bg-background px-3 py-5 shadow-inner sm:px-5 ${elevenPassengerVan ? "max-w-[350px]" : "max-w-[320px]"}`}>
         <div className="mb-5 flex flex-col items-center gap-1 text-muted-foreground">
+          {elevenPassengerVan ? <span className="text-[11px] font-semibold uppercase tracking-[0.14em]">Front of van · 11 passenger seats + driver</span> : (
+          <>
           <svg aria-hidden="true" viewBox="0 0 40 40" className="size-8 fill-none stroke-current stroke-2">
             <circle cx="20" cy="20" r="14" />
             <circle cx="20" cy="20" r="3" />
             <path d="M20 6v11M8 26l9-5M32 26l-9-5" />
           </svg>
           <span className="text-[11px] font-semibold uppercase tracking-[0.14em]">Driver · front</span>
+          </>
+          )}
         </div>
         <div className="space-y-3" role="group" aria-label="Van seats, front to back">
           {rows.map(row => {
+            if (elevenPassengerVan) return (
+              <div key={row} role="group" aria-label={row === 1 ? "Front passenger row and driver" : row === 3 ? "Middle row with center seat" : `Row ${row}`}
+                className={row === 1 ? "rounded-2xl border border-border bg-white p-2" : ""}>
+                {row === 1 ? <p className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Front row</p> : null}
+                <div className="grid grid-cols-3 items-center gap-2">
+                  {([0, 1, 2] as const).map(column => {
+                    const seat = layout.find(position => position.row === row && position.column === column);
+                    if (seat) return renderSeat(seat);
+                    if (row === 1 && column === 2) return (
+                      <div key="driver" role="img" aria-label="Driver seat, not bookable" className="flex min-h-18 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted text-muted-foreground">
+                        <svg aria-hidden="true" viewBox="0 0 40 40" className="size-7 fill-none stroke-current stroke-2">
+                          <circle cx="20" cy="20" r="14" /><circle cx="20" cy="20" r="3" />
+                          <path d="M20 6v11M8 26l9-5M32 26l-9-5" />
+                        </svg>
+                        <span className="mt-1 text-[10px] font-semibold">Driver</span>
+                      </div>
+                    );
+                    return column === 1 ? <span key={`aisle-${row}`} aria-hidden="true" className="text-center text-[10px] font-medium text-muted-foreground">aisle</span> : <span key={`empty-${row}-${column}`} aria-hidden="true" />;
+                  })}
+                </div>
+              </div>
+            );
             const left = layout.find(seat => seat.row === row && seat.column === 0);
             const right = layout.find(seat => seat.row === row && seat.column === 1);
             return (
