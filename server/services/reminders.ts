@@ -5,11 +5,10 @@ import { expireStaleHolds } from "./inventory";
 import { TEMPLATES, boardingCopy, tripReminderCopy } from "./notifications";
 import { getSettings } from "./policies";
 
-const REMINDER_CHANNELS = ["in_app", "email", "sms", "push"] as const;
 type ReminderKind = "24h" | "boarding";
 
 function formatTime(d: Date) {
-  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return d.toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
 }
 
 async function remindDeparture(departureId: number, kind: ReminderKind, now: Date) {
@@ -62,17 +61,17 @@ async function remindDeparture(departureId: number, kind: ReminderKind, now: Dat
 
       const title = kind === "boarding" ? "Boarding soon" : outbound ? "Trip tomorrow" : "Upcoming departure";
       const payload = { bookingId: booking.id, departureId };
-      // notify() uses a separate database connection; write the same four
-      // channel records here so the marker, legacy flag and departure guard
-      // commit or roll back together under the departure row lock.
-      await tx.insert(notifications).values(REMINDER_CHANNELS.map(channel => ({
+      // Record only an actual in-app notice. Email, SMS and push delivery need
+      // provider adapters and must not be marked sent before those exist.
+      // The notice, marker and departure guard commit under the same lock.
+      await tx.insert(notifications).values({
         userId: booking.userId,
-        channel,
+        channel: "in_app",
         templateKey,
         title,
         body: reminderBody,
         payload,
-      })));
+      });
       if (outbound) {
         await tx.update(bookings).set(kind === "24h"
           ? { reminder24hSentAt: now }

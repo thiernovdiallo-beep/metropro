@@ -6,6 +6,7 @@ import { COOKIE_NAME } from "@/const";
 import { formatDate, formatTime, moneyExact } from "@/lib/format";
 import { prepareIdPhoto } from "@/lib/id-photo";
 import { trpc } from "@/lib/trpc";
+import { genuineStripeReceiptUrl } from "@/lib/stripeReceipt";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Link, useRoute } from "wouter";
 import { toast } from "sonner";
@@ -42,9 +43,9 @@ export default function Account() {
   return (
     <PageShell>
       <div className="container grid min-w-0 gap-8 py-10 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <aside className="flex min-w-0 gap-2 overflow-x-auto lg:flex-col">
+        <aside className="grid min-w-0 grid-cols-2 gap-2 self-start sm:grid-cols-3 lg:flex lg:flex-col">
           {NAV.map(([href, label]) => (
-            <Link key={href} href={href} className="rounded-md px-3 py-2 text-sm hover:bg-secondary">
+            <Link key={href} href={href} className="inline-flex min-h-11 items-center rounded-md px-3 py-2 text-sm hover:bg-secondary">
               {label}
             </Link>
           ))}
@@ -59,23 +60,26 @@ export default function Account() {
           {section === "notifications" ? <Notes /> : null}
           {section === "support" ? <Support /> : null}
           {section === "settings" ? <Settings userId={user?.id} userName={user?.name} email={user?.email} phone={user?.phone} /> : null}
-          {!section ? <Upcoming /> : null}
+          {!section ? <Upcoming name={user?.name} /> : null}
         </section>
       </div>
     </PageShell>
   );
 }
 
-function Upcoming() {
+function Upcoming({ name }: { name?: string | null }) {
   const q = trpc.account.overview.useQuery();
-  const cancel = trpc.account.cancelBooking.useMutation({
-    onSuccess: () => toast.success("Trip canceled"),
-  });
+  const trips = [...(q.data?.upcoming ?? [])].sort((a, b) => (a.outbound?.departAt?.getTime() ?? 0) - (b.outbound?.departAt?.getTime() ?? 0));
   return (
     <div>
-      <h1 className="font-serif text-3xl">Upcoming trips</h1>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Your Metro Pro account</p>
+      <h1 className="mt-2 font-serif text-3xl">Welcome{name ? `, ${name.split(" ")[0]}` : ""}</h1>
+      <div className="mt-5 grid gap-3 sm:grid-cols-3"><div className="ticket-card p-4"><p className="text-xs text-muted-foreground">Upcoming trips</p><p className="font-serif text-2xl">{q.data?.upcoming.length ?? "—"}</p></div><div className="ticket-card p-4"><p className="text-xs text-muted-foreground">Previous bookings</p><p className="font-serif text-2xl">{q.data?.previous.length ?? "—"}</p></div><div className="ticket-card p-4"><p className="text-xs text-muted-foreground">Membership</p><p className="mt-2 font-semibold capitalize">{q.data?.membership?.status ?? "Not subscribed"}</p></div></div>
+      <h2 className="mt-8 font-serif text-2xl">Upcoming trips</h2>
+      {q.isLoading ? <p role="status" className="mt-4 text-sm">Loading your bookings…</p> : null}
+      {q.error ? <p role="alert" className="mt-4 text-sm">Bookings could not be loaded. Please retry.</p> : null}
       <div className="mt-5 grid gap-3">
-        {(q.data?.upcoming ?? []).map(item => (
+        {trips.map(item => (
           <div key={item.booking.id} className="ticket-card p-5">
             <div className="font-semibold">
               {item.outbound?.origin?.name} → {item.outbound?.destination?.name}
@@ -83,25 +87,22 @@ function Upcoming() {
             <div className="text-sm text-muted-foreground">
               {item.outbound ? `${formatDate(item.outbound.departAt)} · ${formatTime(item.outbound.departAt)}` : ""}
             </div>
-            <div className="mt-2 text-xs">{item.booking.bookingNumber}</div>
-            <div className="mt-3 flex gap-2">
+            <div className="mt-2 text-xs">{item.booking.bookingNumber} · {item.booking.passengerCount} passenger{item.booking.passengerCount === 1 ? "" : "s"} · Confirmed</div>
+            <div className="mt-2 text-sm">{item.passengers.map(p => `${p.firstName} ${p.lastName} · ${p.seatNumber ? `Seat ${p.seatNumber}` : p.outboundSeatType === "front" ? "Front seat" : "Regular seat"}`).join(" · ")}</div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link href={`/account/booking/${item.booking.id}`} className="inline-flex min-h-11 items-center rounded-md border border-input px-4 text-sm font-semibold text-primary">Booking details</Link>
               {item.tickets[0] ? (
-                <Link href={`/ticket/${item.tickets[0].qrToken}`}>
-                  <Button size="sm">Ticket</Button>
-                </Link>
+                <Link href={`/ticket/${item.tickets[0].qrToken}`} className="inline-flex min-h-11 items-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground">View first ticket</Link>
               ) : null}
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => cancel.mutate({ bookingId: item.booking.id })}
-              >
-                Cancel
-              </Button>
             </div>
           </div>
         ))}
-        {q.data?.upcoming?.length === 0 ? <p className="text-sm text-muted-foreground">No upcoming trips.</p> : null}
+        {q.data?.upcoming?.length === 0 ? <div className="ticket-card p-5 text-sm"><p>No upcoming trips yet.</p><Link href="/#trip-search" className="mt-3 inline-flex min-h-11 items-center font-semibold text-primary underline">Find a trip</Link></div> : null}
       </div>
+      <h2 className="mt-8 font-serif text-2xl">Recent bookings</h2>
+      <div className="mt-3 grid gap-2">{(q.data?.previous ?? []).slice(0, 3).map(item => <Link href={`/account/booking/${item.booking.id}`} key={item.booking.id} className="ticket-card block min-h-11 p-4 text-sm"><strong>{item.booking.bookingNumber}</strong> · {item.outbound?.origin?.name} → {item.outbound?.destination?.name} · <span className="capitalize">{item.booking.status.replace("_", " ")}</span></Link>)}{q.data?.previous.length === 0 ? <p className="text-sm text-muted-foreground">No previous bookings yet.</p> : null}</div>
+      <h2 className="mt-8 font-serif text-xl">Quick actions</h2>
+      <div className="mt-3 flex flex-wrap gap-2"><Link href="/#trip-search" className="inline-flex min-h-11 items-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground">Book a trip</Link><Link href="/account/past" className="inline-flex min-h-11 items-center rounded-md border border-input px-4 text-sm font-semibold">My bookings</Link><Link href="/account/settings" className="inline-flex min-h-11 items-center rounded-md border border-input px-4 text-sm font-semibold">My profile</Link></div>
     </div>
   );
 }
@@ -111,15 +112,18 @@ function Past() {
   return (
     <div>
       <h1 className="font-serif text-3xl">Previous trips</h1>
+      {q.isLoading ? <p role="status" className="mt-3 text-sm">Loading your trips…</p> : null}
       <div className="mt-5 grid gap-3">
         {(q.data?.previous ?? []).map(item => (
           <div key={item.booking.id} className="ticket-card p-5">
             <div className="font-semibold">
               {item.outbound?.origin?.name} → {item.outbound?.destination?.name}
             </div>
-            <div className="text-sm capitalize">{item.booking.status.replace("_", " ")}</div>
+            <div className="mt-1 text-sm capitalize">{item.outbound ? formatDate(item.outbound.departAt) : ""} · {item.booking.bookingNumber} · {item.booking.status.replace("_", " ")}</div>
+            <Link href={`/account/booking/${item.booking.id}`} className="mt-3 inline-flex min-h-11 items-center font-semibold text-primary underline">Booking details</Link>
           </div>
         ))}
+        {q.data?.previous.length === 0 ? <p className="ticket-card p-5 text-sm text-muted-foreground">No previous trips yet.</p> : null}
       </div>
     </div>
   );
@@ -130,14 +134,17 @@ function Tickets() {
   return (
     <div>
       <h1 className="font-serif text-3xl">Digital tickets</h1>
+      {q.isLoading ? <p role="status" className="mt-3 text-sm">Loading your tickets…</p> : null}
       <div className="mt-5 grid gap-3">
         {(q.data ?? []).flatMap(item =>
-          item.tickets.map(t => (
+          item.tickets.filter(t => t.status !== "voided").map(t => (
             <Link key={t.id} href={`/ticket/${t.qrToken}`} className="ticket-card block p-5">
-              {item.booking.bookingNumber} · {t.status}
+              <span className="font-semibold">{item.passengers.find(p => p.id === t.passengerId)?.firstName} {item.passengers.find(p => p.id === t.passengerId)?.lastName}</span> · {item.booking.bookingNumber} · {t.status.replace("_", " ")}
+              <span className="mt-1 block text-sm text-muted-foreground">{item.outbound?.id === t.departureId ? `${item.outbound?.origin?.name} → ${item.outbound?.destination?.name}` : `${item.returnTrip?.origin?.name} → ${item.returnTrip?.destination?.name}`} · {(() => { const p = item.passengers.find(person => person.id === t.passengerId); const seat = item.outbound?.id === t.departureId ? p?.seatNumber : p?.returnSeatNumber; return seat ? `Seat ${seat}` : t.seatType === "front" ? "Front seat" : "Regular seat"; })()}</span>
             </Link>
           ))
         )}
+        {q.data?.length === 0 ? <p className="ticket-card p-5 text-sm text-muted-foreground">No paid digital tickets yet.</p> : null}
       </div>
     </div>
   );
@@ -156,6 +163,7 @@ function MembershipPanel() {
       <p className="mt-2 text-sm text-muted-foreground">
         Status: {overview.data?.membership?.status ?? "None"}
       </p>
+      {overview.data?.membership?.currentPeriodEnd ? <p className="mt-1 text-sm">Current billing period ends {formatDate(overview.data.membership.currentPeriodEnd)}. {overview.data.membership.freeReschedulesRemaining} complimentary reschedule{overview.data.membership.freeReschedulesRemaining === 1 ? "" : "s"} remaining.</p> : null}
       <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground">
         Metro Pro Member is a {monthlyPrice}-per-month subscription. Once you join through Stripe,
         your payment method is charged now and automatically each month until you cancel.
@@ -291,8 +299,8 @@ function Receipts() {
               {p.kind} · {p.status}
             </span>
             <span>{moneyExact(p.amountCents)}</span>
-            {p.receiptUrl ? (
-              <a href={p.receiptUrl} className="text-accent" target="_blank" rel="noreferrer">
+            {genuineStripeReceiptUrl(p.receiptUrl) ? (
+              <a href={genuineStripeReceiptUrl(p.receiptUrl)!} className="text-accent" target="_blank" rel="noreferrer">
                 Receipt
               </a>
             ) : null}

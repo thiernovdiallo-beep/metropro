@@ -1,4 +1,4 @@
-import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
 import {
   bookings,
   departures,
@@ -22,17 +22,17 @@ function occupancyBand(pct: number) {
 export async function getOpsKpis(now = new Date()) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  const startToday = new Date(now);
-  startToday.setHours(0, 0, 0, 0);
-  const endToday = new Date(startToday);
-  endToday.setDate(endToday.getDate() + 1);
-  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const { start: startToday, end: endToday } = analyticsDateRange({ period: "today" }, now)!;
+  const weekAgo = analyticsDateRange({ period: "week" }, now)!.start;
+  const monthStart = analyticsDateRange({ period: "month" }, now)!.start;
 
   const todayTrips = await db
     .select()
     .from(departures)
-    .where(and(gte(departures.departAt, startToday), lte(departures.departAt, endToday)));
+    .where(and(gte(departures.departAt, startToday), lt(departures.departAt, endToday), ne(departures.status, "canceled")));
+
+  const [newBookings] = await db.select({ n: sql<number>`count(*)` }).from(bookings)
+    .where(and(gte(bookings.createdAt, startToday), lt(bookings.createdAt, endToday)));
 
   const ticketsSold = todayTrips.reduce((s, d) => s + d.seatsSold, 0);
   const seatsAvailable = todayTrips.reduce(
@@ -45,15 +45,15 @@ export async function getOpsKpis(now = new Date()) {
   const [revToday] = await db
     .select({ total: sql<number>`coalesce(sum(${payments.amountCents}),0)` })
     .from(payments)
-    .where(and(eq(payments.status, "succeeded"), gte(payments.createdAt, startToday)));
+    .where(and(eq(payments.status, "succeeded"), gte(payments.createdAt, startToday), lt(payments.createdAt, endToday)));
   const [revWeek] = await db
     .select({ total: sql<number>`coalesce(sum(${payments.amountCents}),0)` })
     .from(payments)
-    .where(and(eq(payments.status, "succeeded"), gte(payments.createdAt, weekAgo)));
+    .where(and(eq(payments.status, "succeeded"), gte(payments.createdAt, weekAgo), lt(payments.createdAt, endToday)));
   const [revMonth] = await db
     .select({ total: sql<number>`coalesce(sum(${payments.amountCents}),0)` })
     .from(payments)
-    .where(and(eq(payments.status, "succeeded"), gte(payments.createdAt, monthStart)));
+    .where(and(eq(payments.status, "succeeded"), gte(payments.createdAt, monthStart), lt(payments.createdAt, endToday)));
 
   const [activeMembers] = await db
     .select({ n: sql<number>`count(*)` })
@@ -67,21 +67,26 @@ export async function getOpsKpis(now = new Date()) {
   const [cancels] = await db
     .select({ n: sql<number>`count(*)` })
     .from(bookings)
-    .where(and(eq(bookings.status, "canceled"), gte(bookings.updatedAt, startToday)));
+    .where(and(eq(bookings.status, "canceled"), gte(bookings.updatedAt, startToday), lt(bookings.updatedAt, endToday)));
   const [refundCount] = await db
     .select({ n: sql<number>`count(*)` })
     .from(refunds)
-    .where(gte(refunds.createdAt, startToday));
+    .where(and(eq(refunds.status, "succeeded"), gte(refunds.updatedAt, startToday), lt(refunds.updatedAt, endToday)));
+  const [[pendingRefunds], [failedRefunds]] = await Promise.all([
+    db.select({ n: sql<number>`count(*)` }).from(refunds).where(eq(refunds.status, "pending")),
+    db.select({ n: sql<number>`count(*)` }).from(refunds).where(eq(refunds.status, "failed")),
+  ]);
   const delayed = todayTrips.filter(t => t.status === "delayed").length;
 
   const vans = await db.select().from(vehicles);
-  const activeVans = vans.filter(v => v.status === "assigned" || v.status === "in_transit").length;
+  const activeVans = vans.filter(v => v.status !== "maintenance" && v.status !== "out_of_service").length;
   const driversAssigned = new Set(
     todayTrips.map(t => t.driverId).filter((id): id is number => Boolean(id))
   ).size;
 
   return {
     tripsToday: todayTrips.length,
+    bookingsToday: Number(newBookings?.n ?? 0),
     activeVans,
     activeDrivers: driversAssigned,
     ticketsSold,
@@ -94,27 +99,86 @@ export async function getOpsKpis(now = new Date()) {
     mrrCents: Number(mrr?.total ?? 0),
     cancellationsToday: Number(cancels?.n ?? 0),
     refundsToday: Number(refundCount?.n ?? 0),
+    pendingRefunds: Number(pendingRefunds?.n ?? 0),
+    failedRefunds: Number(failedRefunds?.n ?? 0),
     delayedTrips: delayed,
     trips: todayTrips,
   };
 }
 
-export async function getAnalytics() {
+export function averagePaidSeatCents(totalCents: number, seatCount: number) {
+  return seatCount > 0 ? Math.round(totalCents / seatCount) : 0;
+}
+
+export type AnalyticsPeriod = "all" | "today" | "week" | "month" | "custom";
+
+function nyDate(now: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function nyMidnight(date: string) {
+  const utc = new Date(`${date}T00:00:00.000Z`);
+  if (!Number.isFinite(utc.getTime()) || utc.toISOString().slice(0, 10) !== date) throw new RangeError("Invalid calendar date");
+  // At 00:00 UTC New York is still on the preceding evening, which has the
+  // same UTC offset as the upcoming local midnight even on a DST change day.
+  const text = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", timeZoneName: "shortOffset" })
+    .formatToParts(utc).find(part => part.type === "timeZoneName")?.value ?? "";
+  const match = /^GMT([+-])(\d{1,2})(?::(\d{2}))?$/.exec(text);
+  if (!match) throw new Error("New York timezone offset is unavailable");
+  const minutes = (Number(match[2]) * 60 + Number(match[3] ?? 0)) * (match[1] === "+" ? 1 : -1);
+  return new Date(utc.getTime() - minutes * 60_000);
+}
+
+export function analyticsDateRange(input: { period: AnalyticsPeriod; from?: string; to?: string }, now = new Date()) {
+  if (input.period === "all") return undefined;
+  const day = nyDate(now);
+  const first = new Date(`${day}T00:00:00.000Z`);
+  let from = day;
+  let to = day;
+  if (input.period === "week") {
+    const daysSinceMonday = (first.getUTCDay() + 6) % 7;
+    from = new Date(first.getTime() - daysSinceMonday * 86_400_000).toISOString().slice(0, 10);
+  }
+  if (input.period === "month") from = `${day.slice(0, 7)}-01`;
+  if (input.period === "custom") {
+    if (!input.from || !input.to) throw new RangeError("Choose both dates for a custom range");
+    from = input.from; to = input.to;
+  }
+  const fromUtc = new Date(`${from}T00:00:00.000Z`);
+  const toUtc = new Date(`${to}T00:00:00.000Z`);
+  if (!Number.isFinite(fromUtc.getTime()) || !Number.isFinite(toUtc.getTime()) ||
+      fromUtc.toISOString().slice(0, 10) !== from || toUtc.toISOString().slice(0, 10) !== to ||
+      toUtc < fromUtc || toUtc.getTime() - fromUtc.getTime() > 365 * 86_400_000) {
+    throw new RangeError("Choose a valid date range of no more than 366 days");
+  }
+  const nextDay = new Date(toUtc.getTime() + 86_400_000).toISOString().slice(0, 10);
+  return { start: nyMidnight(from), end: nyMidnight(nextDay) };
+}
+
+export async function getAnalytics(range?: { start: Date; end: Date }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
   const allDeps = await db.select().from(departures);
+  const periodDeps = allDeps.filter(dep => dep.status !== "canceled" && (!range || dep.departAt >= range.start && dep.departAt < range.end));
   const allRoutes = await db.select().from(routes);
   const allVehicles = await db.select().from(vehicles);
   const confirmed = await db.select().from(bookings).where(eq(bookings.status, "confirmed"));
-  const canceled = await db.select().from(bookings).where(eq(bookings.status, "canceled"));
-  const allBookings = await db.select().from(bookings);
-  const noshows = await db.select().from(passengers).where(eq(passengers.status, "no_show"));
-  const boarded = await db.select().from(passengers).where(eq(passengers.status, "boarded"));
+  const allBookings = await db.select().from(bookings)
+    .where(range ? and(gte(bookings.createdAt, range.start), lt(bookings.createdAt, range.end)) : undefined);
+  const canceled = allBookings.filter(booking => booking.status === "canceled" || booking.status === "refunded");
+  const eligibleBookingIds = allBookings.filter(booking => booking.status === "confirmed").map(booking => booking.id);
+  const allPax = eligibleBookingIds.length
+    ? await db.select().from(passengers).where(inArray(passengers.bookingId, eligibleBookingIds)) : [];
+  const noshows = allPax.filter(person => person.status === "no_show");
+  const boarded = allPax.filter(person => person.status === "boarded");
   const members = await db.select().from(memberships).where(eq(memberships.status, "active"));
-  const succeeded = await db.select().from(payments).where(eq(payments.status, "succeeded"));
+  const succeeded = await db.select().from(payments).where(and(eq(payments.status, "succeeded"),
+    range ? and(gte(payments.createdAt, range.start), lt(payments.createdAt, range.end)) : undefined));
 
-  const occupancyByDeparture = allDeps.map(d => {
+  const occupancyByDeparture = periodDeps.map(d => {
     const pct = d.capacity ? Math.round((d.seatsSold / d.capacity) * 100) : 0;
     return {
       departureId: d.id,
@@ -128,7 +192,7 @@ export async function getAnalytics() {
   });
 
   const occupancyByRoute = allRoutes.map(r => {
-    const deps = allDeps.filter(d => d.routeId === r.id);
+    const deps = periodDeps.filter(d => d.routeId === r.id);
     const sold = deps.reduce((s, d) => s + d.seatsSold, 0);
     const cap = deps.reduce((s, d) => s + d.capacity, 0);
     const pct = cap ? Math.round((sold / cap) * 100) : 0;
@@ -188,13 +252,15 @@ export async function getAnalytics() {
     revenueCents: revenuePerTripMap.get(d.id) ?? 0,
   }));
 
-  const avgTicket =
-    ticketPayments.length === 0
-      ? 0
-      : Math.round(ticketPayments.reduce((s, p) => s + p.amountCents, 0) / ticketPayments.length);
+  const bookingById = new Map(confirmed.map(booking => [booking.id, booking]));
+  const paidSeatCount = ticketPayments.reduce((total, payment) => {
+    const booking = payment.bookingId ? bookingById.get(payment.bookingId) : null;
+    return total + (booking ? booking.passengerCount * (booking.returnDepartureId ? 2 : 1) : 0);
+  }, 0);
+  const avgTicket = averagePaidSeatCents(ticketPayments.reduce((sum, payment) => sum + payment.amountCents, 0), paidSeatCount);
 
   const userCounts = new Map<number, number>();
-  for (const b of confirmed) {
+  for (const b of confirmed.filter(booking => !range || booking.createdAt >= range.start && booking.createdAt < range.end)) {
     if (b.userId !== null) userCounts.set(b.userId, (userCounts.get(b.userId) ?? 0) + 1);
   }
   const repeatCustomers = [...userCounts.values()].filter(n => n > 1).length;
@@ -205,18 +271,19 @@ export async function getAnalytics() {
 
   const dayCounts = new Array(7).fill(0);
   const hourCounts = new Map<number, number>();
-  for (const d of allDeps) {
+  const departureClock = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "numeric", hourCycle: "h23" });
+  for (const d of periodDeps) {
     if (d.seatsSold <= 0) continue;
-    dayCounts[d.departAt.getDay()] += d.seatsSold;
-    const h = d.departAt.getHours();
+    const parts = Object.fromEntries(departureClock.formatToParts(d.departAt).map(part => [part.type, part.value]));
+    dayCounts[["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(parts.weekday)] += d.seatsSold;
+    const h = Number(parts.hour);
     hourCounts.set(h, (hourCounts.get(h) ?? 0) + d.seatsSold);
   }
 
-  const totalPassengers = await db.select({ n: sql<number>`count(*)` }).from(passengers);
   const cancelRate = allBookings.length
     ? Math.round((canceled.length / allBookings.length) * 100)
     : 0;
-  const passengerTotal = Number(totalPassengers[0]?.n ?? 0);
+  const passengerTotal = allPax.length;
   const noShowRate = passengerTotal ? Math.round((noshows.length / passengerTotal) * 100) : 0;
 
   return {

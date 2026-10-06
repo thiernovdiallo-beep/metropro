@@ -52,17 +52,27 @@ export default function PassengerInfo() {
   const roundTrip = Boolean(retId);
   const outMap = trpc.booking.getSeatMap.useQuery({ departureId: outId }, { enabled: outId > 0, refetchInterval: 15_000, refetchOnWindowFocus: true });
   const retMap = trpc.booking.getSeatMap.useQuery({ departureId: retId }, { enabled: roundTrip, refetchInterval: 15_000, refetchOnWindowFocus: true });
-  const pax = Math.min(10, Math.max(1, Number(params.get("pax") ?? 1) || 1));
-  const [contactFirstName, setFirst] = useState(user?.name?.split(" ")[0] ?? "");
-  const [contactLastName, setLast] = useState(user?.name?.split(" ").slice(1).join(" ") ?? "");
-  const [phone, setPhone] = useState(user?.phone ?? "");
-  const [email, setEmail] = useState(user?.email ?? "");
-  const [emergencyName, setEmName] = useState("");
-  const [emergencyPhone, setEmPhone] = useState("");
+  const pax = Math.min(12, Math.max(1, Number(params.get("pax") ?? 1) || 1));
+  const previous = useMemo(() => {
+    try {
+      const raw = sessionStorage.getItem("metropro-booking");
+      const draft = raw ? JSON.parse(raw) : null;
+      return draft && Number(draft.out) === outId && Number(draft.ret) === retId && Number(draft.pax) === pax ? draft : null;
+    } catch { return null; }
+  }, [outId, retId, pax]);
+  const fromSeatPage = Boolean(previous?.passengers?.length === pax && previous.passengers.every((person: Traveler) => person.seatNumber && (!roundTrip || person.returnSeatNumber)));
+  const [contactFirstName, setFirst] = useState(previous?.contactFirstName ?? user?.name?.split(" ")[0] ?? "");
+  const [contactLastName, setLast] = useState(previous?.contactLastName ?? user?.name?.split(" ").slice(1).join(" ") ?? "");
+  const [phone, setPhone] = useState(previous?.phone ?? user?.phone ?? "");
+  const [email, setEmail] = useState(previous?.email ?? user?.email ?? "");
+  const [emergencyName, setEmName] = useState(previous?.emergencyName ?? "");
+  const [emergencyPhone, setEmPhone] = useState(previous?.emergencyPhone ?? "");
   const [travelers, setTravelers] = useState<Traveler[]>(() =>
-    Array.from({ length: pax }, () => ({
-      firstName: "", lastName: "", outboundSeatType: "standard", returnSeatType: roundTrip ? "standard" : null,
-      isMemberTraveler: false,
+    Array.from({ length: pax }, (_, index) => ({
+      firstName: previous?.passengers?.[index]?.firstName ?? "", lastName: previous?.passengers?.[index]?.lastName ?? "",
+      outboundSeatType: previous?.passengers?.[index]?.outboundSeatType ?? "standard", returnSeatType: roundTrip ? previous?.passengers?.[index]?.returnSeatType ?? "standard" : null,
+      seatNumber: previous?.passengers?.[index]?.seatNumber, returnSeatNumber: previous?.passengers?.[index]?.returnSeatNumber,
+      isMemberTraveler: previous?.passengers?.[index]?.isMemberTraveler ?? false,
     }))
   );
 
@@ -102,8 +112,8 @@ export default function PassengerInfo() {
   function go(event: React.FormEvent) {
     event.preventDefault();
     if (!namesReady || !seatsReady || !outwardFits || !returnFits || !memberNameMatches) return;
-    sessionStorage.setItem("metropro-booking", JSON.stringify({
-      out: params.get("out"), ret: params.get("ret"), pax: String(pax),
+    sessionStorage.setItem("metropro-booking", JSON.stringify({ ...previous,
+      out: params.get("out"), ret: params.get("ret"), pax: String(pax), search: params.get("search"),
       type: roundTrip ? "round_trip" : "one_way",
       contactFirstName, contactLastName, phone, email, emergencyName, emergencyPhone,
       // Checkout forwards the stored passenger objects to quote and createCheckout unchanged.
@@ -119,12 +129,13 @@ export default function PassengerInfo() {
   return (
     <PageShell>
       <div className="container max-w-2xl py-10">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Step 2 of 3 · Your trip</p>
-        <h1 className="mt-2 font-serif text-3xl">Passenger information</h1>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Your trip · Step 4</p>
+        <h1 className="mt-2 font-serif text-3xl">Passenger details</h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          Each departure has nine regular seats ({money(standard)}) and one front passenger seat ({money(front)}).
+          Choose each traveler's available seat ({money(standard)} regular or {money(front)} front on this route).
           The traveling member pays {money(member)} for their own regular seat; the front seat is always {money(front)}.
         </p>
+        {fromSeatPage ? <Link href={`/seats?${params}`} className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-primary underline">Back to seats</Link> : null}
         {!isAuthenticated ? (
           <div className="mt-6 rounded-xl border border-primary/20 bg-secondary p-4 text-sm">
             <strong>Booking as a guest.</strong> No sign-in or ID photo is needed. Enter your contact details and save your private ticket link after payment.
@@ -212,7 +223,7 @@ export default function PassengerInfo() {
               </div>
             ))}
           </section>
-          {namesReady ? (
+          {namesReady && !fromSeatPage ? (
             <div className="grid min-w-0 gap-6" aria-label="Select seats">
               <div>
                 <h2 className="font-serif text-2xl">Choose your seats</h2>
@@ -231,9 +242,9 @@ export default function PassengerInfo() {
                 </div>
               ) : null}
             </div>
-          ) : (
+          ) : !fromSeatPage ? (
             <p className="rounded-xl bg-muted p-4 text-sm text-muted-foreground">Enter each passenger's first and last name to open the seat map.</p>
-          )}
+          ) : null}
           {hasMembership && !chosenMember ? (
             <p className="rounded-xl bg-secondary p-4 text-sm">The member fare applies only when you select yourself as one of the travelers.</p>
           ) : null}

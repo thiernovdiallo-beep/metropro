@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { and, eq, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import {
+  auditLogs,
   bookings,
   cities,
   departures,
@@ -18,6 +19,7 @@ import { getDb } from "../db";
 import { affectedRows } from "../lib/mysql";
 import { setVehicleStatus } from "../services/dispatch";
 import { TEMPLATES, notify } from "../services/notifications";
+import { seatNumberForTicket } from "../services/ticket-seat";
 import { driverProcedure, router } from "../_core/trpc";
 import type { User } from "../../drizzle/schema";
 
@@ -131,8 +133,10 @@ export const driverRouter = router({
           boardedAt: t.boardedAt,
           phone: b.contactPhone,
           bookingNumber: b.bookingNumber,
+          paymentStatus: "paid" as const,
           ticketId: t.id,
           seatType: t.seatType,
+          seatNumber: seatNumberForTicket(t, p),
         });
       }
       return { ...bundle, manifest };
@@ -144,7 +148,7 @@ export const driverRouter = router({
       if (dep.status !== "boarding") {
         throw new TRPCError({ code: "BAD_REQUEST", message: "This trip is not open for boarding." });
       }
-      return db.transaction(async tx => {
+      const result = await db.transaction(async tx => {
         const [ticket] = await tx.select().from(tickets).where(eq(tickets.qrToken, input.qrToken)).limit(1).for("update");
         if (!ticket || ticket.departureId !== input.departureId || ticket.status === "voided") {
           throw new TRPCError({ code: "NOT_FOUND", message: "Ticket not found for this trip." });
@@ -152,7 +156,7 @@ export const driverRouter = router({
         const [currentTrip] = await tx.select({ status: departures.status }).from(departures)
           .where(eq(departures.id, input.departureId)).limit(1).for("update");
         if (currentTrip?.status !== "boarding") throw new TRPCError({ code: "BAD_REQUEST", message: "Boarding has closed." });
-        const [booking] = await tx.select({ status: bookings.status }).from(bookings)
+        const [booking] = await tx.select({ status: bookings.status, userId: bookings.userId, bookingNumber: bookings.bookingNumber }).from(bookings)
           .where(eq(bookings.id, ticket.bookingId)).limit(1);
         if (booking?.status !== "confirmed") {
           throw new TRPCError({ code: "BAD_REQUEST", message: "This ticket has not been paid or has been canceled." });
@@ -161,13 +165,27 @@ export const driverRouter = router({
         if (!passenger) throw new TRPCError({ code: "NOT_FOUND" });
         if (ticket.status === "boarded") {
           return { passenger: { id: passenger.id, firstName: passenger.firstName,
-            lastName: passenger.lastName, status: "boarded" as const }, alreadyBoarded: true };
+            lastName: passenger.lastName, status: "boarded" as const, seatNumber: seatNumberForTicket(ticket, passenger) },
+            alreadyBoarded: true, ownerId: null, bookingNumber: booking.bookingNumber };
         }
         await tx.update(tickets).set({ status: "boarded", boardedAt: new Date() }).where(eq(tickets.id, ticket.id));
         await tx.update(passengers).set({ status: "boarded" }).where(eq(passengers.id, passenger.id));
+        await tx.insert(auditLogs).values({ actorUserId: ctx.user.id, action: "ticket.boarded",
+          entityType: "ticket", entityId: String(ticket.id),
+          metadata: { bookingId: ticket.bookingId, departureId: input.departureId, passengerId: passenger.id } });
         return { passenger: { id: passenger.id, firstName: passenger.firstName,
-          lastName: passenger.lastName, status: "boarded" as const }, alreadyBoarded: false };
+          lastName: passenger.lastName, status: "boarded" as const, seatNumber: seatNumberForTicket(ticket, passenger) }, alreadyBoarded: false,
+          ownerId: booking.userId, bookingNumber: booking.bookingNumber };
       });
+      if (!result.alreadyBoarded && result.ownerId !== null) {
+        try {
+          await notify({ userId: result.ownerId, templateKey: TEMPLATES.boarding_confirmed,
+            title: "Passenger boarded", body: `${result.passenger.firstName} ${result.passenger.lastName} boarded booking ${result.bookingNumber}.`,
+            payload: { departureId: input.departureId } });
+        } catch (error) { console.warn("[driver.scan] Boarding notice could not be stored", error instanceof Error ? error.name : "unknown"); }
+      }
+      return { passenger: result.passenger, bookingNumber: result.bookingNumber, departureId: input.departureId,
+        alreadyBoarded: result.alreadyBoarded };
     }),
   setPassengerStatus: driverProcedure
     .input(

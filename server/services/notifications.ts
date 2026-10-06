@@ -15,6 +15,7 @@ export const TEMPLATES = {
   upcoming_departure: "upcoming_departure",
   reminder_24h: "reminder_24h",
   boarding_reminder: "boarding_reminder",
+  boarding_confirmed: "boarding_confirmed",
   trip_delay: "trip_delay",
   trip_cancellation: "trip_cancellation",
   booking_reschedule: "booking_reschedule",
@@ -25,18 +26,17 @@ export const TEMPLATES = {
 
 export async function notify(input: NoticeInput) {
   const db = await getDb();
-  if (!db) return;
-  const channels = ["in_app", "email", "sms", "push"] as const;
-  await db.insert(notifications).values(
-    channels.map(channel => ({
-      userId: input.userId ?? null,
-      channel,
-      templateKey: input.templateKey,
-      title: input.title,
-      body: input.body,
-      payload: input.payload ?? null,
-    }))
-  );
+  if (!db || input.userId == null) return;
+  // Only in-app delivery exists today. Email, SMS and push require configured
+  // providers; inserting them as "sent" would misrepresent delivery to staff.
+  await db.insert(notifications).values({
+    userId: input.userId,
+    channel: "in_app",
+    templateKey: input.templateKey,
+    title: input.title,
+    body: input.body,
+    payload: input.payload ?? null,
+  });
 }
 
 export function tripReminderCopy(origin: string, destination: string, when: string) {

@@ -15,6 +15,12 @@ export type SeatAvailability = {
   priceCents: number;
 };
 
+export function capacityForSeatMap(vehicleCapacity: number | null, departureCapacity: number) {
+  if (vehicleCapacity === null) throw new Error("Departure has no assigned vehicle");
+  if (vehicleCapacity < departureCapacity) throw new Error("Departure capacity exceeds its assigned vehicle");
+  return departureCapacity;
+}
+
 /** A confirmed booking is paid; pending payments hold a seat only until their deadline. */
 export function seatStatusForBooking(
   bookingStatus: BookingStatus,
@@ -55,12 +61,10 @@ export async function getSeatAvailability(departureId: number, transaction?: Tra
     .limit(1);
 
   if (!departure) throw new Error("Departure not found");
-  if (departure.vehicleCapacity === null) throw new Error("Departure has no assigned vehicle");
-  // Existing holds use the departure's capacity snapshot. Never display extra
-  // seats that those holds cannot sell after an administrator edits a vehicle.
-  if (departure.vehicleCapacity !== departure.departureCapacity) {
-    throw new Error("Departure capacity does not match its assigned vehicle");
-  }
+  // Existing holds use the departure's snapshot; a later vehicle expansion
+  // must never add seats to previously reserved departures. A smaller vehicle
+  // cannot safely serve a larger departure without explicit reassignment.
+  const capacity = capacityForSeatMap(departure.vehicleCapacity, departure.departureCapacity);
 
   const assignments = await db
     .select({
@@ -88,7 +92,7 @@ export async function getSeatAvailability(departureId: number, transaction?: Tra
     if (status === "taken" || (status === "held" && previous !== "taken") || !previous) statusBySeat.set(seatNumber, status);
   }
 
-  return getSeatLayout(departure.vehicleCapacity).map(({ seatNumber, seatType }) => ({
+  return getSeatLayout(capacity).map(({ seatNumber, seatType }) => ({
     seatNumber,
     seatType,
     status: statusBySeat.get(seatNumber) ?? "available",

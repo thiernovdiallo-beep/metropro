@@ -1,6 +1,6 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap");
 
 @custom-variant dark (&:is(.dark *));
 
@@ -149,4 +149,12 @@
   }
   .form-field { min-width: 0; display: grid; gap: 0.5rem; }
   .form-field input, .form-field select, .form-field textarea { width: 100%; }
+}
+
+@media print {
+  header, footer, .ticket-print-actions, .no-print { display: none !important; }
+  body:has(.manifest-print) .container > :not(.manifest-print) { display: none !important; }
+  body { background: white !important; color: #17384a !important; }
+  .ticket-card { box-shadow: none !important; }
+  @page { margin: 14mm; }
 }

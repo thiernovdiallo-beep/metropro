@@ -1,11 +1,12 @@
 import { eq, sql } from "drizzle-orm";
-import { bookings, memberships, passengers, payments, refunds, tickets, users } from "../../drizzle/schema";
+import { bookings, memberships, passengers, payments, tickets, users } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { affectedRows, insertId } from "../lib/mysql";
 import { TEMPLATES, notify } from "./notifications";
+import { inventoryTransaction, lockDepartureInventory } from "./inventory";
 import { makeQrToken } from "./tickets";
 
-export type TicketFulfillmentResult = "confirmed" | "already_confirmed" | "unavailable" | "missing";
+export type TicketFulfillmentResult = "confirmed" | "already_confirmed" | "already_refunded" | "unavailable" | "missing";
 
 export async function fulfillTicketPayment(opts: {
   bookingId: number;
@@ -19,11 +20,37 @@ export async function fulfillTicketPayment(opts: {
 
   // A locked booking row serializes Checkout and PaymentIntent webhooks with
   // payment failure and the hold-expiry worker. Either both legs commit or none do.
-  const result = await db.transaction(async tx => {
+  const result = await inventoryTransaction(db, async tx => {
     const [booking] = await tx.select().from(bookings).where(eq(bookings.id, opts.bookingId)).limit(1).for("update");
     if (!booking) return { state: "missing" as const, booking: null };
-    if (booking.status === "confirmed") return { state: "already_confirmed" as const, booking };
+    if (booking.status === "confirmed") {
+      const [recorded] = await tx.select().from(payments).where(eq(payments.bookingId, booking.id)).limit(1);
+      const paymentIntentId = opts.paymentIntentId ?? booking.stripePaymentIntentId;
+      const checkoutSessionId = opts.checkoutSessionId ?? booking.stripeCheckoutSessionId;
+      await tx.update(bookings).set({ stripePaymentIntentId: paymentIntentId, stripeCheckoutSessionId: checkoutSessionId })
+        .where(eq(bookings.id, booking.id));
+      if (recorded?.status === "succeeded") await tx.update(payments).set({
+        stripePaymentIntentId: paymentIntentId, stripeCheckoutSessionId: checkoutSessionId,
+        receiptUrl: opts.receiptUrl ?? recorded.receiptUrl,
+      }).where(eq(payments.id, recorded.id));
+      return { state: "already_confirmed" as const, booking };
+    }
+    if (booking.status === "refunded") return { state: "already_refunded" as const, booking };
     if (booking.status !== "pending_payment") return { state: "unavailable" as const, booking };
+    await lockDepartureInventory(tx, [booking.outboundDepartureId, booking.returnDepartureId]);
+    if (!booking.holdExpiresAt || booking.holdExpiresAt <= new Date()) {
+      const release = async (departureId: number, count: number, frontCount: number) => tx.execute(sql`
+        UPDATE departures SET seatsHeld = GREATEST(seatsHeld - ${count}, 0),
+          frontSeatsHeld = GREATEST(frontSeatsHeld - ${frontCount}, 0)
+        WHERE id = ${departureId}`);
+      await release(booking.outboundDepartureId, booking.passengerCount, booking.outboundFrontSeats);
+      if (booking.returnDepartureId) await release(booking.returnDepartureId, booking.passengerCount, booking.returnFrontSeats);
+      await tx.update(passengers).set({ departureId: null, seatNumber: null, returnDepartureId: null, returnSeatNumber: null })
+        .where(eq(passengers.bookingId, booking.id));
+      await tx.update(payments).set({ status: "failed" }).where(eq(payments.bookingId, booking.id));
+      await tx.update(bookings).set({ status: "canceled", holdExpiresAt: null }).where(eq(bookings.id, booking.id));
+      return { state: "unavailable" as const, booking };
+    }
 
     const convert = async (departureId: number, count: number, frontCount: number) => {
       const updated = await tx.execute(sql`
@@ -87,6 +114,10 @@ export async function fulfillTicketPayment(opts: {
         stripeCheckoutSessionId: checkoutSessionId,
         receiptUrl: opts.receiptUrl ?? null,
       });
+    } else {
+      await tx.update(payments).set({ status: "succeeded", amountCents: paidCents,
+        stripePaymentIntentId: paymentIntentId, stripeCheckoutSessionId: checkoutSessionId,
+        receiptUrl: opts.receiptUrl ?? recorded.receiptUrl }).where(eq(payments.id, recorded.id));
     }
     return { state: "confirmed" as const, booking };
   });
@@ -115,9 +146,10 @@ export async function fulfillTicketPayment(opts: {
 export async function failTicketPayment(bookingId: number) {
   const db = await getDb();
   if (!db) return;
-  await db.transaction(async tx => {
+  await inventoryTransaction(db, async tx => {
     const [booking] = await tx.select().from(bookings).where(eq(bookings.id, bookingId)).limit(1).for("update");
     if (!booking || booking.status !== "pending_payment") return;
+    await lockDepartureInventory(tx, [booking.outboundDepartureId, booking.returnDepartureId]);
     const release = async (departureId: number, count: number, frontCount: number) => {
       await tx.execute(sql`
         UPDATE departures
@@ -131,61 +163,7 @@ export async function failTicketPayment(bookingId: number) {
     await tx.update(passengers).set({ departureId: null, seatNumber: null, returnDepartureId: null, returnSeatNumber: null })
       .where(eq(passengers.bookingId, booking.id));
     await tx.update(bookings).set({ status: "canceled", holdExpiresAt: null }).where(eq(bookings.id, booking.id));
-  });
-}
-
-export async function recordLatePaymentRefund(opts: {
-  bookingId: number;
-  paymentIntentId: string;
-  checkoutSessionId?: string | null;
-  refundId: string;
-  refundedCents: number;
-}) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const booking = await db.transaction(async tx => {
-    const [current] = await tx.select().from(bookings).where(eq(bookings.id, opts.bookingId)).limit(1).for("update");
-    if (!current || current.status === "refunded") return null;
-    if (current.status !== "canceled") throw new Error("Cannot mark a confirmed booking as an expired-hold refund");
-    const [existingPayment] = await tx.select().from(payments).where(eq(payments.bookingId, current.id)).limit(1);
-    let paymentId = existingPayment?.id;
-    if (existingPayment) {
-      await tx.update(payments).set({ status: "refunded", stripePaymentIntentId: opts.paymentIntentId })
-        .where(eq(payments.id, existingPayment.id));
-    } else {
-      const result = await tx.insert(payments).values({
-        userId: current.userId,
-        bookingId: current.id,
-        kind: "ticket",
-        amountCents: opts.refundedCents,
-        currency: "usd",
-        status: "refunded",
-        stripePaymentIntentId: opts.paymentIntentId,
-        stripeCheckoutSessionId: opts.checkoutSessionId ?? current.stripeCheckoutSessionId,
-      });
-      paymentId = insertId(result);
-    }
-    await tx.insert(refunds).values({
-      paymentId: paymentId!,
-      bookingId: current.id,
-      amountCents: opts.refundedCents,
-      reason: "payment_after_hold_expired",
-      stripeRefundId: opts.refundId,
-    });
-    await tx.update(bookings).set({
-      status: "refunded",
-      stripePaymentIntentId: opts.paymentIntentId,
-      amountCents: opts.refundedCents,
-      holdExpiresAt: null,
-    }).where(eq(bookings.id, current.id));
-    return current;
-  });
-  if (booking && booking.userId !== null) await notify({
-    userId: booking.userId,
-    templateKey: TEMPLATES.refund,
-    title: "Refund processing — selected seats expired",
-    body: `Booking ${booking.bookingNumber} could not be confirmed because its seat hold expired. Your payment refund is processing. Please book another departure.`,
-    payload: { bookingId: booking.id },
+    await tx.update(payments).set({ status: "failed" }).where(eq(payments.bookingId, booking.id));
   });
 }
 

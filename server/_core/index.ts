@@ -9,6 +9,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { ensureSeed } from "../seed";
 import { runReminders } from "../services/reminders";
+import { reconcilePendingRefunds } from "../services/refund-lifecycle";
 import { getMemberIdPhoto } from "../services/member-profile";
 import { getDriverPortrait } from "../services/driver-private";
 import { driverProfiles } from "../../drizzle/schema";
@@ -21,7 +22,7 @@ async function startServer() {
   const server = createServer(app);
 
   app.use((req, res, next) => {
-    if (/^\/(confirmation|ticket|checkout|book|account|create-account|driver|admin)(\/|$)/.test(req.path)) {
+    if (/^\/(confirmation|ticket|checkout|trip|seats|book|account|create-account|driver|admin)(\/|$)/.test(req.path)) {
       res.set("Cache-Control", "private, no-store, max-age=0");
       res.set("Referrer-Policy", "no-referrer");
       res.set("X-Robots-Tag", "noindex, nofollow, noarchive");
@@ -138,6 +139,10 @@ async function startServer() {
     process.exit(1);
   });
   server.listen(port, "0.0.0.0", () => console.log(`Server listening on port ${port}`));
+  const refundTimer = setInterval(() => {
+    void reconcilePendingRefunds(true).catch(error => console.warn("[refunds] Reconciliation will retry", error instanceof Error ? error.name : "unknown"));
+  }, 5 * 60_000);
+  refundTimer.unref();
 }
 
 startServer().catch(error => {

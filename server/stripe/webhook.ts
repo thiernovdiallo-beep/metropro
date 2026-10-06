@@ -6,10 +6,11 @@ import { getDb } from "../db";
 import {
   failTicketPayment,
   fulfillTicketPayment,
-  recordLatePaymentRefund,
   setStripeCustomer,
   upsertMembershipFromSubscription,
 } from "../services/fulfillment";
+import { beginLatePaymentRefund, submitRefundIntent } from "../services/refund-lifecycle";
+import { TEMPLATES, notify } from "../services/notifications";
 import { getSettings } from "../services/policies";
 import { getStripe } from "./client";
 
@@ -23,7 +24,7 @@ function mapSubStatus(status: string) {
 
 async function alreadyProcessed(eventId: string) {
   const db = await getDb();
-  if (!db) return false;
+  if (!db) throw new Error("Database unavailable while checking Stripe event deduplication");
   const [row] = await db
     .select()
     .from(processedStripeEvents)
@@ -34,7 +35,7 @@ async function alreadyProcessed(eventId: string) {
 
 async function markProcessed(eventId: string, type: string) {
   const db = await getDb();
-  if (!db) return;
+  if (!db) throw new Error("Database unavailable while recording Stripe event");
   await db
     .insert(processedStripeEvents)
     .values({ eventId, type, processedAt: new Date() })
@@ -58,24 +59,24 @@ async function settlePaidTicket(opts: {
   if (result === "missing") throw new Error("Paid Stripe ticket has no matching booking");
   if (result !== "unavailable") return;
   if (!opts.paymentIntentId) throw new Error("Cannot refund an expired booking without a payment intent");
-  const refund = await getStripe().refunds.create(
-    { payment_intent: opts.paymentIntentId },
-    { idempotencyKey: `metropro-expired-${opts.bookingId}-${opts.paymentIntentId}` }
-  );
-  if (refund.status === "failed") throw new Error("Refund failed for payment after expired seat hold");
-  await recordLatePaymentRefund({
-    bookingId: opts.bookingId,
-    paymentIntentId: opts.paymentIntentId,
-    checkoutSessionId: opts.checkoutSessionId,
-    refundId: refund.id,
-    refundedCents: refund.amount,
-  });
+  if (!opts.amountCents || opts.amountCents <= 0) throw new Error("Captured payment amount is missing for expired booking refund");
+  const intent = await beginLatePaymentRefund({ bookingId: opts.bookingId,
+    paymentIntentId: opts.paymentIntentId, checkoutSessionId: opts.checkoutSessionId,
+    amountCents: opts.amountCents });
+  const refundStatus = await submitRefundIntent(intent.intentId);
+  if (intent.userId !== null && refundStatus === "pending") {
+    try { await notify({ userId: intent.userId, templateKey: TEMPLATES.refund,
+      title: "Refund processing — selected seats expired",
+      body: `Booking ${intent.bookingNumber} could not be confirmed because its seat hold expired. Stripe has not yet confirmed that money was returned.`,
+      payload: { bookingId: opts.bookingId } }); }
+    catch (error) { console.warn("[webhook] Customer notice unavailable", error instanceof Error ? error.name : "unknown"); }
+  }
 }
 
 async function handleEvent(event: Stripe.Event) {
   if (await alreadyProcessed(event.id)) return;
   const db = await getDb();
-  if (!db) return;
+  if (!db) throw new Error("Database unavailable while processing Stripe event");
   const settings = await getSettings();
 
   switch (event.type) {
@@ -97,10 +98,9 @@ async function handleEvent(event: Stripe.Event) {
                 : session.payment_intent?.id,
             checkoutSessionId: session.id,
             amountCents: session.amount_total ?? null,
-            receiptUrl:
-              typeof session.invoice === "string"
-                ? null
-                : (session as Stripe.Checkout.Session).url ?? null,
+            // A hosted Checkout URL is not a receipt; the succeeded
+            // PaymentIntent event may supply the actual charge receipt.
+            receiptUrl: null,
           });
         }
       }
@@ -127,19 +127,25 @@ async function handleEvent(event: Stripe.Event) {
       const pi = event.data.object as Stripe.PaymentIntent;
       const bookingId = Number(pi.metadata?.booking_id ?? 0);
       if (bookingId) {
+        const charge = pi.latest_charge;
+        let receiptUrl = charge && typeof charge !== "string" ? charge.receipt_url : null;
+        if (!receiptUrl && typeof charge === "string") {
+          try { receiptUrl = (await getStripe().charges.retrieve(charge)).receipt_url; }
+          catch (error) { console.warn("[Stripe webhook] Charge receipt unavailable", error instanceof Error ? error.name : "unknown"); }
+        }
         await settlePaidTicket({
           bookingId,
           paymentIntentId: pi.id,
           amountCents: pi.amount_received || pi.amount,
-          receiptUrl: null,
+          receiptUrl,
         });
       }
       break;
     }
     case "payment_intent.payment_failed": {
-      const pi = event.data.object as Stripe.PaymentIntent;
-      const bookingId = Number(pi.metadata?.booking_id ?? 0);
-      if (bookingId) await failTicketPayment(bookingId);
+      // Card decline is not terminal: the same open Checkout session allows
+      // another card. Keep its booked seats until session.expired or the
+      // asynchronous payment explicitly fails.
       break;
     }
     case "checkout.session.expired":

@@ -379,8 +379,11 @@ export const refunds = mysqlTable("refunds", {
   reason: varchar("reason", { length: 255 }),
   adminUserId: int("adminUserId"),
   stripeRefundId: varchar("stripeRefundId", { length: 128 }),
+  status: mysqlEnum("status", ["pending", "succeeded", "failed"]).default("succeeded").notNull(),
+  failureReason: varchar("failureReason", { length: 255 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [uniqueIndex("refunds_stripeRefundId_unique").on(table.stripeRefundId)]);
 
 export const memberships = mysqlTable(
   "memberships",

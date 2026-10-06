@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, gte, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { FIRST_PARTY_HEADER } from "@shared/const";
 import { z } from "zod";
@@ -17,8 +17,8 @@ import {
   memberCredentials,
   passengers,
   payments,
-  refunds,
   routes,
+  supportTickets,
   tickets,
   users,
   vehicles,
@@ -29,13 +29,16 @@ import { createDriverSetupToken, DRIVER_SETUP_MS } from "../services/driver-auth
 import { prepareDriverPrivate } from "../services/driver-private";
 import { normalizeMemberEmail } from "../services/member-auth";
 import { assertMemberAuthOrigin } from "../services/checkout-origin";
-import { getAnalytics, getOpsKpis } from "../services/analytics";
+import { analyticsDateRange, getAnalytics, getOpsKpis } from "../services/analytics";
+import { adminBookingDetail, adminPayments, adminSupportTickets, searchAdminBookings } from "../services/admin-operations";
+import { changesBookedItinerary } from "../services/route-safety";
+import { rescheduleWithNumberedSeats } from "../services/rescheduling";
+import { beginBookingRefund, reconcilePendingRefunds, submitRefundIntent } from "../services/refund-lifecycle";
 import { assertDriverAssignable, assertVehicleAssignable } from "../services/dispatch";
-import { restoreSoldSeats } from "../services/inventory";
 import { allocatePaidAcrossLegs } from "../services/pricing";
 import { TEMPLATES, notify } from "../services/notifications";
 import { DEFAULT_SETTINGS, getSettings, saveSettings, type AppSettings } from "../services/policies";
-import { getStripe, stripeEnabled } from "../stripe/client";
+import { stripeEnabled } from "../stripe/client";
 import { adminProcedure, router } from "../_core/trpc";
 
 async function tripDetail(dep: typeof departures.$inferSelect) {
@@ -94,8 +97,132 @@ async function tripDetail(dep: typeof departures.$inferSelect) {
 }
 
 export const adminRouter = router({
-  kpis: adminProcedure.query(async () => getOpsKpis()),
-  analytics: adminProcedure.query(async () => getAnalytics()),
+  kpis: adminProcedure.query(async () => { await reconcilePendingRefunds(); return getOpsKpis(); }),
+  analytics: adminProcedure.input(z.object({ period: z.enum(["all", "today", "week", "month", "custom"]),
+    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).optional())
+    .query(async ({ input }) => {
+      try { return await getAnalytics(analyticsDateRange(input ?? { period: "all" })); }
+      catch (error) { if (error instanceof RangeError) throw new TRPCError({ code: "BAD_REQUEST", message: error.message }); throw error; }
+    }),
+  bookings: adminProcedure.input(z.object({
+    query: z.string().trim().max(80).optional(),
+    status: z.enum(["pending_payment", "confirmed", "canceled", "refunded"]).optional(),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
+      const parsed = Date.parse(`${value}T00:00:00Z`);
+      return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 10) === value;
+    }).optional(),
+  })).query(({ input }) => searchAdminBookings(input)),
+  booking: adminProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input }) => {
+    await reconcilePendingRefunds();
+    const item = await adminBookingDetail(input.id);
+    if (!item) throw new TRPCError({ code: "NOT_FOUND" });
+    return item;
+  }),
+  rescheduleBooking: adminProcedure.input(z.object({
+    bookingId: z.number().int().positive(), newOutboundDepartureId: z.number().int().positive(),
+    newReturnDepartureId: z.number().int().positive().nullable(),
+    outboundSeats: z.array(z.string().min(1).max(10)).min(1).max(12),
+    returnSeats: z.array(z.string().min(1).max(10)).max(12).nullable(),
+  })).mutation(async ({ ctx, input }) => {
+    const result = await rescheduleWithNumberedSeats(input, ctx.user.id, true);
+    try { await writeAudit(ctx.user.id, "booking.reschedule", "booking", input.bookingId, {
+      newOutboundDepartureId: input.newOutboundDepartureId, newReturnDepartureId: input.newReturnDepartureId,
+    }); } catch (error) { console.warn("[admin.reschedule] Audit write failed after committed reschedule", error instanceof Error ? error.name : "unknown"); }
+    return result;
+  }),
+  payments: adminProcedure.query(async () => { await reconcilePendingRefunds(); return adminPayments(); }),
+  recentBookings: adminProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return [];
+    return db.select({ id: bookings.id, bookingNumber: bookings.bookingNumber, status: bookings.status,
+      contactFirstName: bookings.contactFirstName, contactLastName: bookings.contactLastName,
+      createdAt: bookings.createdAt }).from(bookings).orderBy(desc(bookings.createdAt)).limit(5);
+  }),
+  supportTickets: adminProcedure.query(() => adminSupportTickets()),
+  resolveSupport: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    await db.update(supportTickets).set({ status: "closed" }).where(eq(supportTickets.id, input.id));
+    await writeAudit(ctx.user.id, "support.close", "supportTicket", input.id);
+    return { ok: true };
+  }),
+  upcomingDepartures: adminProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return [];
+    const upcoming = await db.select().from(departures)
+      .where(and(gte(departures.departAt, new Date()), inArray(departures.status, ["scheduled", "boarding", "delayed"])))
+      .orderBy(asc(departures.departAt)).limit(8);
+    return Promise.all(upcoming.map(tripDetail));
+  }),
+  schedule: adminProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return [];
+    const next = await db.select().from(departures).where(gte(departures.departAt, new Date(Date.now() - 86_400_000)))
+      .orderBy(asc(departures.departAt)).limit(60);
+    const [allRoutes, allCities, allVehicles, allDrivers] = await Promise.all([
+      db.select().from(routes), db.select().from(cities), db.select().from(vehicles), db.select().from(driverProfiles),
+    ]);
+    const routeById = new Map(allRoutes.map(row => [row.id, row]));
+    const cityById = new Map(allCities.map(row => [row.id, row.name]));
+    const vehicleById = new Map(allVehicles.map(row => [row.id, row.code]));
+    const driverById = new Map(allDrivers.map(row => [row.id, row.fullName]));
+    return next.map(dep => {
+      const route = routeById.get(dep.routeId);
+      return { departure: dep,
+        routeLabel: route ? `${cityById.get(route.originCityId) ?? "Unknown"} → ${cityById.get(route.destinationCityId) ?? "Unknown"}` : "Route unavailable",
+        vehicleCode: dep.vehicleId ? vehicleById.get(dep.vehicleId) ?? null : null,
+        driverName: dep.driverId ? driverById.get(dep.driverId) ?? null : null,
+        editable: dep.departAt > new Date() && dep.status === "scheduled" && dep.seatsSold === 0 && dep.seatsHeld === 0,
+      };
+    });
+  }),
+  updateDeparture: adminProcedure.input(z.object({ id: z.number().int().positive(), routeId: z.number().int().positive(),
+    vehicleId: z.number().int().positive(), driverId: z.number().int().positive(), departAt: z.string(), arriveAt: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const start = new Date(input.departAt);
+      const end = new Date(input.arriveAt);
+      if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start <= new Date() || end <= start) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Choose a future departure and valid arrival time." });
+      }
+      const [route] = await db.select({ active: routes.isActive }).from(routes).where(eq(routes.id, input.routeId)).limit(1);
+      if (!route?.active) throw new TRPCError({ code: "BAD_REQUEST", message: "Choose an active route." });
+      const vehicle = await assertVehicleAssignable(input.vehicleId, start, end, input.id);
+      try { await assertDriverAssignable(input.driverId, start, end, input.id); }
+      catch (error) { throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Driver unavailable" }); }
+      await db.transaction(async tx => {
+        const [assignedVehicle] = await tx.select({ capacity: vehicles.capacity }).from(vehicles)
+          .where(eq(vehicles.id, vehicle.id)).limit(1).for("update");
+        const [dep] = await tx.select().from(departures).where(eq(departures.id, input.id)).limit(1).for("update");
+        if (!dep) throw new TRPCError({ code: "NOT_FOUND" });
+        if (dep.status !== "scheduled" || dep.departAt <= new Date() || dep.seatsSold || dep.seatsHeld) {
+          throw new TRPCError({ code: "CONFLICT", message: "Only future, empty scheduled departures can be edited. Handle occupied trips through customer support." });
+        }
+        if (!assignedVehicle || assignedVehicle.capacity !== vehicle.capacity) {
+          throw new TRPCError({ code: "CONFLICT", message: "Vehicle changed; reload the schedule." });
+        }
+        await tx.update(departures).set({ routeId: input.routeId, vehicleId: input.vehicleId, driverId: input.driverId,
+          departAt: start, arriveAt: end, capacity: vehicle.capacity }).where(eq(departures.id, input.id));
+      });
+      await writeAudit(ctx.user.id, "departure.edit", "departure", input.id);
+      return { ok: true };
+    }),
+  cancelDeparture: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    await db.transaction(async tx => {
+      const [dep] = await tx.select().from(departures).where(eq(departures.id, input.id)).limit(1).for("update");
+      if (!dep) throw new TRPCError({ code: "NOT_FOUND" });
+      if (dep.status !== "scheduled" || dep.seatsSold || dep.seatsHeld) {
+        throw new TRPCError({ code: "CONFLICT", message: "This trip has passengers or is in progress; resolve bookings and refunds before canceling it." });
+      }
+      await tx.update(departures).set({ status: "canceled" }).where(eq(departures.id, input.id));
+    });
+    await writeAudit(ctx.user.id, "departure.cancel", "departure", input.id);
+    return { ok: true };
+  }),
   trip: adminProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
@@ -205,11 +332,11 @@ export const adminRouter = router({
     .input(
       z.object({
         id: z.number().optional(),
-        code: z.string().min(2),
-        vin: z.string().optional(),
-        make: z.string().min(1),
-        model: z.string().min(1),
-        year: z.number(),
+        code: z.string().trim().min(2).max(16),
+        vin: z.string().trim().max(32).optional(),
+        make: z.string().trim().min(1).max(64),
+        model: z.string().trim().min(1).max(64),
+        year: z.number().int().min(1990).max(new Date().getFullYear() + 2),
         capacity: z.number().int().min(1).max(40),
         currentMileage: z.number().int().min(0),
         status: z.enum(["available", "assigned", "in_transit", "maintenance", "out_of_service"]),
@@ -224,25 +351,29 @@ export const adminRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       if (input.id) {
-        const [prev] = await db.select().from(vehicles).where(eq(vehicles.id, input.id)).limit(1);
-        await db
-          .update(vehicles)
-          .set({
-            code: input.code,
-            vin: input.vin ?? null,
-            make: input.make,
-            model: input.model,
-            year: input.year,
-            capacity: input.capacity,
-            currentMileage: input.currentMileage,
-            status: input.status,
-            assignedDriverId: input.assignedDriverId ?? null,
-            notes: input.notes ?? null,
-            registrationExpiresAt: input.registrationExpiresAt ? new Date(input.registrationExpiresAt) : null,
-            insuranceExpiresAt: input.insuranceExpiresAt ? new Date(input.insuranceExpiresAt) : null,
-            inspectionExpiresAt: input.inspectionExpiresAt ? new Date(input.inspectionExpiresAt) : null,
-          })
-          .where(eq(vehicles.id, input.id));
+        const prev = await db.transaction(async tx => {
+          const [existing] = await tx.select().from(vehicles).where(eq(vehicles.id, input.id!)).limit(1).for("update");
+          if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Vehicle not found" });
+          if (existing.capacity !== input.capacity) {
+            const assigned = await tx.select().from(departures).where(eq(departures.vehicleId, existing.id))
+              .orderBy(departures.id).for("update");
+            const future = assigned.filter(dep => dep.departAt > new Date() && dep.status !== "canceled" && dep.status !== "completed");
+            if (future.some(dep => dep.status !== "scheduled" || dep.seatsSold > 0 || dep.seatsHeld > 0)) {
+              throw new TRPCError({ code: "CONFLICT", message: "This van has booked or active future departures. Assign another vehicle or wait until those trips finish before changing its seat capacity." });
+            }
+            for (const dep of future) await tx.update(departures).set({ capacity: input.capacity }).where(eq(departures.id, dep.id));
+          }
+          await tx.update(vehicles).set({
+            code: input.code, vin: input.vin ?? null, make: input.make, model: input.model,
+            year: input.year, capacity: input.capacity, currentMileage: input.currentMileage,
+            status: input.status, assignedDriverId: input.assignedDriverId === undefined ? existing.assignedDriverId : input.assignedDriverId,
+            notes: input.notes === undefined ? existing.notes : input.notes,
+            registrationExpiresAt: input.registrationExpiresAt === undefined ? existing.registrationExpiresAt : input.registrationExpiresAt ? new Date(input.registrationExpiresAt) : null,
+            insuranceExpiresAt: input.insuranceExpiresAt === undefined ? existing.insuranceExpiresAt : input.insuranceExpiresAt ? new Date(input.insuranceExpiresAt) : null,
+            inspectionExpiresAt: input.inspectionExpiresAt === undefined ? existing.inspectionExpiresAt : input.inspectionExpiresAt ? new Date(input.inspectionExpiresAt) : null,
+          }).where(eq(vehicles.id, input.id!));
+          return existing;
+        });
         if (prev && prev.capacity !== input.capacity) {
           await writeAudit(ctx.user.id, "vehicle.capacity_change", "vehicle", input.id, {
             from: prev.capacity,
@@ -272,11 +403,11 @@ export const adminRouter = router({
   addMaintenance: adminProcedure
     .input(
       z.object({
-        vehicleId: z.number(),
-        type: z.string(),
-        notes: z.string().optional(),
-        mileage: z.number().optional(),
-        performedAt: z.string(),
+        vehicleId: z.number().int().positive(),
+        type: z.string().trim().min(2).max(80),
+        notes: z.string().trim().min(3).max(5000),
+        mileage: z.number().int().min(0).optional(),
+        performedAt: z.string().datetime(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -285,7 +416,7 @@ export const adminRouter = router({
       await db.insert(maintenanceLogs).values({
         vehicleId: input.vehicleId,
         type: input.type,
-        notes: input.notes ?? null,
+        notes: input.notes,
         mileage: input.mileage ?? null,
         performedAt: new Date(input.performedAt),
       });
@@ -412,23 +543,41 @@ export const adminRouter = router({
     .input(
       z.object({
         id: z.number().optional(),
-        originCityId: z.number(),
-        destinationCityId: z.number(),
-        pickupLocationId: z.number(),
-        dropoffLocationId: z.number(),
-        estimatedMinutes: z.number(),
-        standardFareCents: z.number(),
-        memberFareCents: z.number(),
-        frontFareCents: z.number(),
+        originCityId: z.number().int().positive(),
+        destinationCityId: z.number().int().positive(),
+        pickupLocationId: z.number().int().positive(),
+        dropoffLocationId: z.number().int().positive(),
+        estimatedMinutes: z.number().int().min(1).max(2880),
+        standardFareCents: z.number().int().min(0),
+        memberFareCents: z.number().int().min(0),
+        frontFareCents: z.number().int().min(0),
         isActive: z.boolean(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      if (input.originCityId === input.destinationCityId) throw new TRPCError({ code: "BAD_REQUEST", message: "Origin and destination must be different." });
+      const [origin, destination, pickup, dropoff] = await Promise.all([
+        db.select({ id: cities.id }).from(cities).where(eq(cities.id, input.originCityId)).limit(1).then(rows => rows[0]),
+        db.select({ id: cities.id }).from(cities).where(eq(cities.id, input.destinationCityId)).limit(1).then(rows => rows[0]),
+        db.select({ cityId: locations.cityId }).from(locations).where(eq(locations.id, input.pickupLocationId)).limit(1).then(rows => rows[0]),
+        db.select({ cityId: locations.cityId }).from(locations).where(eq(locations.id, input.dropoffLocationId)).limit(1).then(rows => rows[0]),
+      ]);
+      if (!origin || !destination || pickup?.cityId !== origin.id || dropoff?.cityId !== destination.id) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Pickup and drop-off must belong to the selected origin and destination cities." });
+      }
       const { id, ...rest } = input;
       if (id) {
-        await db.update(routes).set(rest).where(eq(routes.id, id));
+        await db.transaction(async tx => {
+          const [existing] = await tx.select().from(routes).where(eq(routes.id, id)).limit(1).for("update");
+          if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Route not found" });
+          if (changesBookedItinerary(existing, rest)) {
+            const [used] = await tx.select({ id: departures.id }).from(departures).where(eq(departures.routeId, id)).limit(1);
+            if (used) throw new TRPCError({ code: "CONFLICT", message: "This route already has departures. Create a new route for different cities, stops, or journey times; existing tickets must keep their itinerary." });
+          }
+          await tx.update(routes).set(rest).where(eq(routes.id, id));
+        });
       } else {
         await db.insert(routes).values(rest);
       }
@@ -450,6 +599,11 @@ export const adminRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       const departAt = new Date(input.departAt);
       const arriveAt = new Date(input.arriveAt);
+      if (!Number.isFinite(departAt.getTime()) || !Number.isFinite(arriveAt.getTime()) || departAt <= new Date() || arriveAt <= departAt) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Choose a future departure and an arrival after departure." });
+      }
+      const [route] = await db.select({ active: routes.isActive }).from(routes).where(eq(routes.id, input.routeId)).limit(1);
+      if (!route?.active) throw new TRPCError({ code: "BAD_REQUEST", message: "Choose an active route." });
       const vehicle = await assertVehicleAssignable(input.vehicleId, departAt, arriveAt);
       try { await assertDriverAssignable(input.driverId, departAt, arriveAt); }
       catch (error) { throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Driver unavailable" }); }
@@ -482,13 +636,36 @@ export const adminRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       const [dep] = await db.select().from(departures).where(eq(departures.id, input.departureId)).limit(1);
       if (!dep) throw new TRPCError({ code: "NOT_FOUND" });
-      await assertVehicleAssignable(input.vehicleId, dep.departAt, dep.arriveAt, dep.id);
+      const vehicle = await assertVehicleAssignable(input.vehicleId, dep.departAt, dep.arriveAt, dep.id);
       try { await assertDriverAssignable(input.driverId, dep.departAt, dep.arriveAt, dep.id); }
       catch (error) { throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Driver unavailable" }); }
-      await db
-        .update(departures)
-        .set({ vehicleId: input.vehicleId, driverId: input.driverId })
-        .where(eq(departures.id, dep.id));
+      await db.transaction(async tx => {
+        const [assignedVehicle] = await tx.select({ capacity: vehicles.capacity, status: vehicles.status }).from(vehicles)
+          .where(eq(vehicles.id, input.vehicleId)).limit(1).for("update");
+        if (!assignedVehicle || assignedVehicle.capacity !== vehicle.capacity || ["maintenance", "out_of_service"].includes(assignedVehicle.status)) {
+          throw new TRPCError({ code: "CONFLICT", message: "Vehicle capacity changed; reload dispatch and try again." });
+        }
+        const [assignedDriver] = await tx.select({ status: driverProfiles.status }).from(driverProfiles)
+          .where(eq(driverProfiles.id, input.driverId)).limit(1).for("update");
+        if (assignedDriver?.status !== "active") throw new TRPCError({ code: "CONFLICT", message: "This driver is not active." });
+        const [current] = await tx.select().from(departures).where(eq(departures.id, dep.id)).limit(1).for("update");
+        if (!current) throw new TRPCError({ code: "NOT_FOUND" });
+        if (current.departAt <= new Date() || !["scheduled", "boarding", "delayed"].includes(current.status)) {
+          throw new TRPCError({ code: "CONFLICT", message: "Only future scheduled or delayed trips can be reassigned." });
+        }
+        const assignments = await tx.select({ id: departures.id, vehicleId: departures.vehicleId,
+          driverId: departures.driverId, departAt: departures.departAt, arriveAt: departures.arriveAt })
+          .from(departures).where(and(or(eq(departures.vehicleId, input.vehicleId), eq(departures.driverId, input.driverId)),
+            inArray(departures.status, ["scheduled", "boarding", "delayed"]))).for("update");
+        if (assignments.some(trip => trip.id !== current.id && trip.departAt < current.arriveAt && trip.arriveAt > current.departAt)) {
+          throw new TRPCError({ code: "CONFLICT", message: "This vehicle or driver is already assigned to an overlapping departure." });
+        }
+        if (current.capacity !== vehicle.capacity && (current.seatsSold > 0 || current.seatsHeld > 0 || current.status !== "scheduled")) {
+          throw new TRPCError({ code: "CONFLICT", message: "An occupied or active departure cannot be assigned to a vehicle with a different number of seats." });
+        }
+        await tx.update(departures).set({ vehicleId: input.vehicleId, driverId: input.driverId, capacity: vehicle.capacity })
+          .where(eq(departures.id, dep.id));
+      });
       await writeAudit(ctx.user.id, "departure.assign", "departure", dep.id, input);
       return { ok: true };
     }),
@@ -511,56 +688,33 @@ export const adminRouter = router({
     return db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(100);
   }),
   refundBooking: adminProcedure
-    .input(z.object({ bookingId: z.number(), reason: z.string() }))
+    .input(z.object({ bookingId: z.number().int().positive(), reason: z.string().trim().min(3).max(255) }))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       const [booking] = await db.select().from(bookings).where(eq(bookings.id, input.bookingId)).limit(1);
       if (!booking) throw new TRPCError({ code: "NOT_FOUND" });
-      if (booking.status === "refunded") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Booking already refunded" });
+      if (booking.status !== "confirmed") throw new TRPCError({ code: "BAD_REQUEST", message: "Only confirmed bookings can be refunded." });
+      if (!booking.stripePaymentIntentId || !stripeEnabled()) throw new TRPCError({ code: "BAD_REQUEST", message: "No Stripe payment is available for an automatic refund. Contact support for manual review." });
+      const [pay] = await db.select().from(payments).where(eq(payments.bookingId, booking.id)).limit(1);
+      if (!pay || pay.status !== "succeeded") throw new TRPCError({ code: "BAD_REQUEST", message: "No successful ticket payment is available for a refund." });
+      const intent = await beginBookingRefund({ bookingId: booking.id, paymentId: pay.id,
+        paymentIntentId: booking.stripePaymentIntentId, reason: input.reason, adminUserId: ctx.user.id });
+      let refundStatus: "pending" | "succeeded" | "failed";
+      try { refundStatus = await submitRefundIntent(intent.intentId); }
+      catch (error) {
+        console.warn("[admin.refund] Durable refund intent will be reconciled", error instanceof Error ? error.name : "unknown");
+        throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Trip canceled. Refund request saved for automatic retry; review its status in Payments." });
       }
-      if (booking.stripePaymentIntentId && stripeEnabled()) {
-        const refund = await getStripe().refunds.create({
-          payment_intent: booking.stripePaymentIntentId,
-        });
-        const [pay] = await db
-          .select()
-          .from(payments)
-          .where(eq(payments.bookingId, booking.id))
-          .limit(1);
-        if (pay) {
-          await db.insert(refunds).values({
-            paymentId: pay.id,
-            bookingId: booking.id,
-            amountCents: booking.amountCents,
-            reason: input.reason,
-            adminUserId: ctx.user.id,
-            stripeRefundId: refund.id,
-          });
-          await db.update(payments).set({ status: "refunded" }).where(eq(payments.id, pay.id));
-        }
-      }
-      await restoreSoldSeats(booking.outboundDepartureId, booking.passengerCount, booking.outboundFrontSeats);
-      if (booking.returnDepartureId) {
-        await restoreSoldSeats(booking.returnDepartureId, booking.passengerCount, booking.returnFrontSeats);
-      }
-      await db.transaction(async tx => {
-        await tx.update(bookings).set({ status: "refunded" }).where(eq(bookings.id, booking.id));
-        await tx.update(passengers).set({ departureId: null, seatNumber: null, returnDepartureId: null, returnSeatNumber: null })
-          .where(eq(passengers.bookingId, booking.id));
-        await tx.update(tickets).set({ status: "voided" }).where(eq(tickets.bookingId, booking.id));
-      });
       if (booking.userId !== null) await notify({
         userId: booking.userId,
         templateKey: TEMPLATES.refund,
-        title: "Refund issued",
-        body: `A refund for booking ${booking.bookingNumber} has been issued.`,
+        title: refundStatus === "failed" ? "Refund needs staff review" : "Refund requested",
+        body: `The refund request for booking ${booking.bookingNumber} is ${refundStatus === "succeeded" ? "confirmed" : refundStatus === "failed" ? "unsuccessful; please contact support" : "processing"}.`,
       });
-      await writeAudit(ctx.user.id, "booking.refund", "booking", booking.id, {
-        reason: input.reason,
-      });
-      return { ok: true };
+      try { await writeAudit(ctx.user.id, "booking.refund", "booking", booking.id, { reason: input.reason, refundStatus }); }
+      catch (error) { console.warn("[admin.refund] Secondary audit could not be stored", error instanceof Error ? error.name : "unknown"); }
+      return { ok: true, refundStatus };
     }),
   runReminders: adminProcedure.mutation(async () => {
     const { runReminders } = await import("../services/reminders");

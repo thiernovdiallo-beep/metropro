@@ -25,6 +25,7 @@ export default function DriverTrip() {
   const vehicleIssue = trpc.driver.reportVehicle.useMutation({ onSuccess: () => toast.success("Vehicle issue sent") });
   const [token, setToken] = useState("");
   const [note, setNote] = useState("");
+  const [scanResult, setScanResult] = useState<{ state: "valid" | "invalid" | "already"; message: string } | null>(null);
   const [scanning, setScanning] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -50,10 +51,13 @@ export default function DriverTrip() {
   async function board(qrToken: string) {
     try {
       const result = await scan.mutateAsync({ qrToken: qrToken.trim(), departureId: id });
+      const details = `${result.passenger.firstName} ${result.passenger.lastName} · ${result.bookingNumber} · ${result.passenger.seatNumber ? `Seat ${result.passenger.seatNumber}` : "Seat unnumbered"} · ${t?.origin?.name ?? "Trip"} → ${t?.destination?.name ?? "destination"}`;
+      setScanResult(result.alreadyBoarded ? { state: "already", message: `${details} · Already boarded.` } : { state: "valid", message: `${details} · Boarded successfully.` });
       toast.success(result.alreadyBoarded ? `${result.passenger.firstName} was already boarded` : `${result.passenger.firstName} ${result.passenger.lastName} boarded`);
       setToken("");
       await utils.driver.trip.invalidate();
     } catch (error) {
+      setScanResult({ state: "invalid", message: error instanceof Error ? error.message : "Ticket could not be scanned." });
       toast.error(error instanceof Error ? error.message : "Ticket could not be scanned.");
     }
   }
@@ -116,7 +120,7 @@ export default function DriverTrip() {
       <Button variant="secondary" disabled={t?.departure?.status !== "departed"} onClick={() => arrive.mutate({ departureId: id })}>Mark arrival</Button>
       <Button variant="outline" disabled={t?.departure?.status !== "arrived"} onClick={() => complete.mutate({ departureId: id })}>Complete trip</Button>
     </div>
-    <section className="ticket-card mt-6 p-4 sm:p-5">
+    <section className="ticket-card no-print mt-6 p-4 sm:p-5">
       <h2 className="font-semibold">Scan passenger QR ticket</h2>
       <p className="mt-1 text-sm text-muted-foreground">Start boarding first. Ask each passenger to show their individual ticket; scanning confirms boarding for this trip only.</p>
       <video ref={videoRef} autoPlay muted playsInline aria-label="Ticket QR camera preview" className={`mt-3 max-h-64 w-full rounded-md bg-primary/10 object-cover ${scanning ? "block" : "hidden"}`} />
@@ -125,23 +129,28 @@ export default function DriverTrip() {
         <Input aria-label="Enter ticket code manually" placeholder="Or enter ticket QR code" value={token} onChange={e => setToken(e.target.value)} />
         <Button disabled={t?.departure?.status !== "boarding" || scan.isPending || token.trim().length < 12} onClick={() => board(token)}>Confirm boarding</Button>
       </div>
+      {scanResult ? <p role="status" aria-live="polite" className={`mt-3 rounded-xl border p-3 text-sm font-semibold ${scanResult.state === "valid" ? "border-green-300 bg-green-50 text-green-900" : scanResult.state === "already" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-red-300 bg-red-50 text-red-900"}`}>{scanResult.state === "valid" ? "VALID" : scanResult.state === "already" ? "ALREADY BOARDED" : "INVALID"} · {scanResult.message}</p> : null}
     </section>
-    <h2 className="mt-8 font-serif text-xl">Booked passengers</h2>
+    <div className="no-print mt-7"><Button variant="outline" className="min-h-11" onClick={() => window.print()} disabled={!t}>Print assigned manifest</Button></div>
+    <section className="manifest-print mt-8" aria-label="Passenger manifest">
+    <h2 className="font-serif text-xl">Booked passengers · {t?.origin?.name} → {t?.destination?.name}</h2>
+    <p className="mt-1 text-xs text-muted-foreground">{t?.departure ? formatTime(t.departure.departAt) : ""} · Vehicle {t?.vehicle?.code ?? "unassigned"} · {boarded}/{t?.manifest?.length ?? 0} boarded</p>
     <div className="mt-3 grid gap-2">
       {(t?.manifest ?? []).map(p => <div key={p.ticketId} className="ticket-card flex flex-wrap items-center justify-between gap-3 p-4">
         <div className="min-w-0">
           <div className="font-medium">{p.firstName} {p.lastName}</div>
-          <div className="text-xs text-muted-foreground">{p.bookingNumber} · {p.phone} · {p.seatType === "front" ? "Front seat" : "Regular seat"}</div>
+          <div className="text-xs text-muted-foreground">{p.bookingNumber} · {p.phone} · {p.seatNumber ? `Seat ${p.seatNumber}` : p.seatType === "front" ? "Front seat" : "Regular seat"} · Paid</div>
           <div className="mt-1 text-xs font-semibold capitalize text-primary">{p.status.replace("_", " ")}{p.boardedAt ? ` · ${formatTime(p.boardedAt)}` : ""}</div>
         </div>
-        {p.status !== "boarded" ? <div className="flex flex-wrap gap-1">
+        {p.status !== "boarded" ? <div className="no-print flex flex-wrap gap-1">
           <Button size="sm" variant="outline" disabled={t?.departure?.status !== "boarding"} onClick={() => setStatus.mutate({ passengerId: p.id, departureId: id, status: "checked_in" })}>Check in</Button>
           <Button size="sm" variant="outline" disabled={t?.departure?.status !== "boarding" && t?.departure?.status !== "departed"} onClick={() => setStatus.mutate({ passengerId: p.id, departureId: id, status: "no_show" })}>No-show</Button>
         </div> : null}
       </div>)}
       {!trip.isLoading && !t?.manifest?.length ? <p className="text-sm text-muted-foreground">No paid tickets on this trip yet.</p> : null}
     </div>
-    <div className="mt-8 grid gap-2">
+    </section>
+    <div className="no-print mt-8 grid gap-2">
       <Input aria-label="Dispatch note" placeholder="Delay, dispatch, or vehicle note" value={note} onChange={e => setNote(e.target.value)} />
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" onClick={() => delay.mutate({ departureId: id, reason: note })}>Report delay</Button>

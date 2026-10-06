@@ -1,17 +1,18 @@
 import { TRPCError } from "@trpc/server";
 import { FIRST_PARTY_HEADER } from "@shared/const";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
-import { bookings, cities, departures, locations, passengers, routes, tickets } from "../../drizzle/schema";
+import { bookings, cities, departures, locations, passengers, payments, refunds, routes, tickets } from "../../drizzle/schema";
 import { getActiveMembership, getDb } from "../db";
 import { createGuestAccess, hasGuestAccess } from "../services/guest-access";
 import { approvedCheckoutOrigin } from "../services/checkout-origin";
-import { assertBookable, holdSeats, releaseHolds } from "../services/inventory";
+import { assertBookable, expireStaleHolds, holdSeatsInTransaction, releaseHoldsInTransaction } from "../services/inventory";
 import { getMemberProfileStatus } from "../services/member-profile";
 import { frontCount, legFareCents, seatFareCents, validateSeatSelections, type SeatSelection } from "../services/pricing";
 import { getSettings } from "../services/policies";
 import { getSeatAvailability } from "../services/seat-inventory";
 import { validateNumberedSeats } from "../services/seat-selection";
+import { reconcilePendingRefunds } from "../services/refund-lifecycle";
 import { throttleSeatMap } from "../services/seat-map-rate-limit";
 import { makeBookingNumber } from "../services/tickets";
 import { getStripe, stripeEnabled } from "../stripe/client";
@@ -32,8 +33,8 @@ const passengerSchema = z.object({
 const selectionInput = z.object({
   outboundDepartureId: z.number().int().positive(),
   returnDepartureId: z.number().int().positive().nullable(),
-  passengerCount: z.number().int().min(1).max(10),
-  passengers: z.array(passengerSchema).min(1).max(10),
+  passengerCount: z.number().int().min(1).max(12),
+  passengers: z.array(passengerSchema).min(1).max(12),
 });
 
 type DepartureDetails = NonNullable<Awaited<ReturnType<typeof loadPricedDeparture>>>;
@@ -50,9 +51,12 @@ function checkedSelections(
   }
 }
 
-function requireReversedRoute(outbound: DepartureDetails, ret: DepartureDetails | null) {
+export function requireReversedRoute(outbound: DepartureDetails, ret: DepartureDetails | null) {
   if (ret && (outbound.route.destinationCityId !== ret.route.originCityId || outbound.route.originCityId !== ret.route.destinationCityId)) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Return must reverse the outbound route" });
+  }
+  if (ret && ret.departAt <= outbound.arriveAt) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Return must depart after the outbound trip arrives" });
   }
 }
 
@@ -108,7 +112,7 @@ export const bookingRouter = router({
         if (error instanceof Error && error.message === "Departure not found") {
           throw new TRPCError({ code: "NOT_FOUND", message: "Departure not found" });
         }
-        throw error;
+        throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "The seat map is temporarily unavailable. Please retry." });
       }
     }),
   quote: publicProcedure
@@ -133,14 +137,25 @@ export const bookingRouter = router({
       } catch (error) {
         throw new TRPCError({ code: "CONFLICT", message: error instanceof Error ? error.message : "Selected seats are sold out" });
       }
+      if (input.passengers.some(person => person.seatNumber || person.returnSeatNumber)) {
+        try {
+          validateNumberedSeats(await getSeatAvailability(outbound.id), input.passengers, "outbound");
+          if (ret) validateNumberedSeats(await getSeatAvailability(ret.id), input.passengers, "return");
+        } catch (error) {
+          if (error instanceof TRPCError) throw error;
+          throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Seats cannot be checked right now. Please retry." });
+        }
+      }
       const outboundBreakdown = input.passengers.map(p => ({
         name: `${p.firstName} ${p.lastName}`,
+        seatNumber: p.seatNumber ?? null,
         seatType: p.outboundSeatType,
         amountCents: seatFareCents(outbound.route, p.outboundSeatType, p.isMemberTraveler),
         memberFareApplied: p.isMemberTraveler && p.outboundSeatType === "standard",
       }));
       const returnBreakdown = ret ? input.passengers.map(p => ({
         name: `${p.firstName} ${p.lastName}`,
+        seatNumber: p.returnSeatNumber ?? null,
         seatType: p.returnSeatType,
         amountCents: seatFareCents(ret.route, p.returnSeatType!, p.isMemberTraveler),
         memberFareApplied: p.isMemberTraveler && p.returnSeatType === "standard",
@@ -186,27 +201,15 @@ export const bookingRouter = router({
       if (!ret && input.passengers.some(p => p.returnSeatNumber)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Return seats require a return departure." });
       }
+      // Seat maps disregard expired pending holds. Clear their unique seat rows
+      // before taking a new hold so the database agrees with public availability.
+      await expireStaleHolds();
       const outFront = frontCount(input.passengers, "outbound");
       const retFront = frontCount(input.passengers, "return");
       try {
         await assertBookable(outbound.id, input.passengerCount, isMember, outFront);
         if (ret) await assertBookable(ret.id, input.passengerCount, isMember, retFront);
       } catch (error) {
-        throw new TRPCError({ code: "CONFLICT", message: error instanceof Error ? error.message : "Selected seats are sold out" });
-      }
-
-      let outboundHeld = false;
-      let returnHeld = false;
-      try {
-        await holdSeats(outbound.id, input.passengerCount, outFront);
-        outboundHeld = true;
-        if (ret) {
-          await holdSeats(ret.id, input.passengerCount, retFront);
-          returnHeld = true;
-        }
-      } catch (error) {
-        if (outboundHeld) await releaseHolds(outbound.id, input.passengerCount, outFront);
-        if (returnHeld && ret) await releaseHolds(ret.id, input.passengerCount, retFront);
         throw new TRPCError({ code: "CONFLICT", message: error instanceof Error ? error.message : "Selected seats are sold out" });
       }
 
@@ -226,17 +229,25 @@ export const bookingRouter = router({
         if (p.returnSeatNumber) passengerSeatMetadata[`passenger_${index + 1}_return_seat`] = p.returnSeatNumber;
       });
       let bookingId: number | null = null;
+      let sessionId: string | null = null;
       try {
         bookingId = await db.transaction(async tx => {
+          // Lock departure rows in stable order even for legacy quantity bookings.
+          // Conditional counter updates and passenger rows now commit together.
+          const ids = [outbound.id, ...(ret ? [ret.id] : [])].sort((a, b) => a - b);
+          for (const id of ids) {
+            await tx.select({ id: departures.id }).from(departures).where(eq(departures.id, id)).for("update");
+          }
           if (hasSeatNumbers) {
             // Separate outbound/return indexes cannot prevent cross-leg conflicts.
-            // Lock both departure rows in stable order until validation and inserts commit.
-            const ids = [outbound.id, ...(ret ? [ret.id] : [])].sort((a, b) => a - b);
-            for (const id of ids) {
-              await tx.select({ id: departures.id }).from(departures).where(eq(departures.id, id)).for("update");
-            }
             validateNumberedSeats(await getSeatAvailability(outbound.id, tx), input.passengers, "outbound");
             if (ret) validateNumberedSeats(await getSeatAvailability(ret.id, tx), input.passengers, "return");
+          }
+          try {
+            await holdSeatsInTransaction(tx, outbound.id, input.passengerCount, outFront);
+            if (ret) await holdSeatsInTransaction(tx, ret.id, input.passengerCount, retFront);
+          } catch (error) {
+            throw new TRPCError({ code: "CONFLICT", message: error instanceof Error ? error.message : "Selected seats are sold out" });
           }
           const insertResult = await tx.insert(bookings).values({
             bookingNumber,
@@ -301,29 +312,37 @@ export const bookingRouter = router({
             ...passengerSeatMetadata,
           },
         });
-        await db.update(bookings).set({ stripeCheckoutSessionId: session.id }).where(eq(bookings.id, bookingId));
-        return { checkoutUrl: session.url, bookingNumber, bookingId, guestAccessToken: guestAccess?.token ?? null };
+        sessionId = session.id;
+        if (!session.url) throw new Error("Stripe Checkout did not provide a secure payment URL");
+        await db.transaction(async tx => {
+          await tx.update(bookings).set({ stripeCheckoutSessionId: session.id }).where(eq(bookings.id, bookingId!));
+          await tx.insert(payments).values({ userId: ctx.user?.id ?? null, bookingId,
+            kind: "ticket", amountCents, currency: "usd", status: "pending", stripeCheckoutSessionId: session.id });
+        });
+        return { checkoutUrl: session.url, bookingNumber, bookingId, guestAccessToken: guestAccess?.token ?? null,
+          checkoutExpiresAt: new Date(checkoutExpiresAt * 1000),
+          holdExpiresAt: new Date((checkoutExpiresAt + 5 * 60) * 1000) };
       } catch (error) {
-        let releasePendingHolds = true;
         if (bookingId) {
-          releasePendingHolds = await db.transaction(async tx => {
+          await db.transaction(async tx => {
             const [current] = await tx.select().from(bookings).where(eq(bookings.id, bookingId!)).limit(1).for("update");
-            if (!current || current.status !== "pending_payment") return false;
+            if (!current || current.status !== "pending_payment") return;
+            await releaseHoldsInTransaction(tx, outbound.id, input.passengerCount, outFront);
+            if (ret) await releaseHoldsInTransaction(tx, ret.id, input.passengerCount, retFront);
             await tx.update(passengers).set({ departureId: null, seatNumber: null, returnDepartureId: null, returnSeatNumber: null })
               .where(eq(passengers.bookingId, current.id));
             await tx.update(bookings).set({ status: "canceled", holdExpiresAt: null }).where(eq(bookings.id, current.id));
-            return true;
+            await tx.update(payments).set({ status: "failed" }).where(eq(payments.bookingId, current.id));
           });
         }
-        if (releasePendingHolds) {
-          await releaseHolds(outbound.id, input.passengerCount, outFront);
-          if (ret) await releaseHolds(ret.id, input.passengerCount, retFront);
-        }
+        if (sessionId) try { await getStripe().checkout.sessions.expire(sessionId); }
+        catch (expireError) { console.warn("[booking.checkout] Unable to close failed test checkout", expireError instanceof Error ? expireError.name : "unknown"); }
         if (error instanceof TRPCError) throw error;
         if (typeof error === "object" && error !== null && "code" in error && error.code === "ER_DUP_ENTRY") {
           throw new TRPCError({ code: "CONFLICT", message: "A selected seat was just reserved by someone else." });
         }
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error instanceof Error ? error.message : "Checkout failed" });
+        console.warn("[booking.checkout] Session setup failed", error instanceof Error ? error.name : "unknown");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Checkout could not start. No charge was made; please retry or contact support." });
       }
     }),
   getByNumber: publicProcedure
@@ -331,14 +350,25 @@ export const bookingRouter = router({
     .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) return null;
-      const [booking] = await db.select().from(bookings).where(eq(bookings.bookingNumber, input.bookingNumber)).limit(1);
+      let [booking] = await db.select().from(bookings).where(eq(bookings.bookingNumber, input.bookingNumber)).limit(1);
       if (!booking) return null;
       const owner = Boolean(ctx.user && (booking.userId === ctx.user.id || ctx.user.role === "admin"));
       if (!owner && !hasGuestAccess(booking, input.accessToken)) throw new TRPCError({ code: "NOT_FOUND" });
+      await reconcilePendingRefunds();
+      [booking] = await db.select().from(bookings).where(eq(bookings.id, booking.id)).limit(1);
+      if (!booking) return null;
       const pax = await db.select().from(passengers).where(eq(passengers.bookingId, booking.id));
-      const tix = await db.select().from(tickets).where(eq(tickets.bookingId, booking.id));
+      const tix = await db.select().from(tickets).where(and(eq(tickets.bookingId, booking.id), ne(tickets.status, "voided")));
+      const [refund] = await db.select({ status: refunds.status, amountCents: refunds.amountCents }).from(refunds)
+        .where(eq(refunds.bookingId, booking.id)).limit(1);
+      const toSummary = (trip: DepartureDetails | null) => trip ? {
+        id: trip.id, departAt: trip.departAt, arriveAt: trip.arriveAt,
+        origin: trip.origin, destination: trip.destination, pickup: trip.pickup, dropoff: trip.dropoff,
+      } : null;
+      const outbound = toSummary(await loadPricedDeparture(booking.outboundDepartureId));
+      const returnTrip = booking.returnDepartureId ? toSummary(await loadPricedDeparture(booking.returnDepartureId)) : null;
       const { guestAccessHash: _secretHash, ...safeBooking } = booking;
-      return { booking: safeBooking, passengers: pax, tickets: tix };
+      return { booking: safeBooking, passengers: pax, tickets: tix, outbound, returnTrip, refund: refund ?? null };
     }),
 });
 

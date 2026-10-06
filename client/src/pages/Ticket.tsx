@@ -1,7 +1,8 @@
 import { PageShell, Wordmark } from "@/components/Brand";
-import { formatDateLong, formatTime } from "@/lib/format";
+import { formatDateLong, formatTime, moneyExact } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { QRCodeSVG } from "qrcode.react";
+import { useEffect } from "react";
 import { useRoute, useSearch } from "wouter";
 
 export default function Ticket() {
@@ -9,8 +10,15 @@ export default function Ticket() {
   const token = params?.token ?? "";
   const search = useSearch();
   const accessToken = new URLSearchParams(search).get("access") ?? undefined;
+  const printRequested = new URLSearchParams(search).get("print") === "1";
   const query = trpc.account.ticketByToken.useQuery({ token, accessToken }, { enabled: Boolean(token) });
   const data = query.data;
+  const canPrint = data?.booking?.status === "confirmed" && data?.ticket?.status !== "voided";
+  useEffect(() => {
+    if (!printRequested || !canPrint) return;
+    const timer = window.setTimeout(() => window.print(), 700);
+    return () => window.clearTimeout(timer);
+  }, [printRequested, canPrint]);
   if (!data?.ticket || !data.booking || !data.passenger || !data.trip) {
     return (
       <PageShell>
@@ -37,7 +45,7 @@ export default function Ticket() {
             </div>
             <div>
               {formatDateLong(trip.departAt)}
-              <div className="text-2xl">{formatTime(trip.departAt)}</div>
+              <div className="text-2xl">{formatTime(trip.departAt)} → {formatTime(trip.arriveAt)}</div>
             </div>
             <div className="text-sm text-muted-foreground">
               Pickup {trip.pickup?.label}
@@ -45,6 +53,7 @@ export default function Ticket() {
               Drop-off {trip.dropoff?.label}
             </div>
             <div className="text-sm">Passengers on booking: {booking.passengerCount}</div>
+            <div className="text-sm">Booking total paid: {moneyExact(booking.amountCents)}</div>
             <div className="text-sm font-semibold text-primary">{data.seatNumber ? `Seat ${data.seatNumber}` : `Seat: ${ticket.seatType === "front" ? "Front passenger seat" : "Regular passenger seat"}`}</div>
             <div className="inline-flex rounded-full bg-secondary px-3 py-1 text-xs font-semibold uppercase tracking-wider">
               {ticket.status.replace("_", " ")}
@@ -58,6 +67,7 @@ export default function Ticket() {
             </> : <p className="rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">This ticket is not valid for boarding. Check your booking status or contact support.</p>}
           </div>
         </div>
+        {boardable ? <button type="button" className="ticket-print-actions mt-5 min-h-11 w-full rounded-lg border border-input bg-white px-4 py-2 text-sm font-semibold text-primary hover:bg-secondary" onClick={() => window.print()}>Print ticket / save as PDF</button> : null}
       </div>
     </PageShell>
   );
