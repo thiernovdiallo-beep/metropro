@@ -1,4 +1,4 @@
-import { PageShell } from "@/components/Brand";
+import { CustomerLayout } from "@/layouts/CustomerLayout";
 import { ActionLink, BookingProgress, PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import SeatMap from "@/components/SeatMap";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { money } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 
 type SeatType = "standard" | "front";
@@ -18,9 +18,14 @@ type Traveler = {
   returnSeatType: SeatType | null;
   seatNumber?: string;
   returnSeatNumber?: string;
+  outboundPickupLocationId?: number;
+  outboundDropoffLocationId?: number;
+  returnPickupLocationId?: number;
+  returnDropoffLocationId?: number;
   isMemberTraveler: boolean;
 };
 type MapSeat = { seatNumber: string; seatType: SeatType; status: "available" | "taken" | "held" };
+type TripLocation = { id: number; label: string; address: string; sequence: number };
 
 function sameName(first: string, last: string, accountName?: string | null) {
   const normalize = (name: string) => name.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
@@ -53,6 +58,8 @@ export default function PassengerInfo() {
   const roundTrip = Boolean(retId);
   const outMap = trpc.booking.getSeatMap.useQuery({ departureId: outId }, { enabled: outId > 0, refetchInterval: 15_000, refetchOnWindowFocus: true });
   const retMap = trpc.booking.getSeatMap.useQuery({ departureId: retId }, { enabled: roundTrip, refetchInterval: 15_000, refetchOnWindowFocus: true });
+  const outTrip = trpc.public.departure.useQuery({ id: outId }, { enabled: outId > 0 });
+  const retTrip = trpc.public.departure.useQuery({ id: retId }, { enabled: roundTrip });
   const pax = Math.min(11, Math.max(1, Number(params.get("pax") ?? 1) || 1));
   const previous = useMemo(() => {
     try {
@@ -73,9 +80,40 @@ export default function PassengerInfo() {
       firstName: previous?.passengers?.[index]?.firstName ?? "", lastName: previous?.passengers?.[index]?.lastName ?? "",
       outboundSeatType: previous?.passengers?.[index]?.outboundSeatType ?? "standard", returnSeatType: roundTrip ? previous?.passengers?.[index]?.returnSeatType ?? "standard" : null,
       seatNumber: previous?.passengers?.[index]?.seatNumber, returnSeatNumber: previous?.passengers?.[index]?.returnSeatNumber,
+      outboundPickupLocationId: previous?.passengers?.[index]?.outboundPickupLocationId,
+      outboundDropoffLocationId: previous?.passengers?.[index]?.outboundDropoffLocationId,
+      returnPickupLocationId: previous?.passengers?.[index]?.returnPickupLocationId,
+      returnDropoffLocationId: previous?.passengers?.[index]?.returnDropoffLocationId,
       isMemberTraveler: previous?.passengers?.[index]?.isMemberTraveler ?? false,
     }))
   );
+
+  const locationsForTrip = useCallback((trip: typeof outTrip.data): TripLocation[] => {
+    if (!trip) return [];
+    return [
+      trip.pickup ? { id: trip.pickup.id, label: trip.pickup.label, address: trip.pickup.address, sequence: 0 } : null,
+      ...(trip.stops ?? []).map(stop => stop.id ? { id: stop.id, label: stop.label ?? "Intermediate stop", address: stop.address ?? "", sequence: stop.sequence } : null),
+      trip.dropoff ? { id: trip.dropoff.id, label: trip.dropoff.label, address: trip.dropoff.address, sequence: (trip.stops?.length ?? 0) + 1 } : null,
+    ].filter((location): location is TripLocation => Boolean(location));
+  }, []);
+  const outboundLocations = useMemo(() => locationsForTrip(outTrip.data), [locationsForTrip, outTrip.data]);
+  const returnLocations = useMemo(() => locationsForTrip(retTrip.data), [locationsForTrip, retTrip.data]);
+  useEffect(() => {
+    if (!outboundLocations.length) return;
+    setTravelers(list => list.map(person => ({
+      ...person,
+      outboundPickupLocationId: person.outboundPickupLocationId ?? outboundLocations[0]?.id,
+      outboundDropoffLocationId: person.outboundDropoffLocationId ?? outboundLocations[outboundLocations.length - 1]?.id,
+    })));
+  }, [outboundLocations]);
+  useEffect(() => {
+    if (!roundTrip || !returnLocations.length) return;
+    setTravelers(list => list.map(person => ({
+      ...person,
+      returnPickupLocationId: person.returnPickupLocationId ?? returnLocations[0]?.id,
+      returnDropoffLocationId: person.returnDropoffLocationId ?? returnLocations[returnLocations.length - 1]?.id,
+    })));
+  }, [returnLocations, roundTrip]);
 
   const updateTraveler = useCallback((index: number, change: Partial<Traveler>) => {
     setTravelers(list => list.map((person, i) => i === index ? { ...person, ...change } : person));
@@ -129,7 +167,7 @@ export default function PassengerInfo() {
   const seatMapLoading = outMap.isLoading || (roundTrip && retMap.isLoading);
 
   return (
-    <PageShell>
+    <CustomerLayout>
       <main className="metro-page metro-page--readable">
         <BookingProgress current="Travelers" />
         <PageIntro eyebrow="Your trip · Step 4" title="Passenger details" description={<>Choose each traveler's available seat ({money(standard)} regular or {money(front)} front on this route). The traveling member pays {money(member)} for their own regular seat; the front seat is always {money(front)}.</>} />
@@ -214,6 +252,28 @@ export default function PassengerInfo() {
                     ))}
                   </div>
                 ) : null}
+                {outboundLocations.length > 2 ? (
+                  <div className="grid gap-3 rounded-xl bg-secondary/50 p-4 sm:grid-cols-2">
+                    <div className="sm:col-span-2"><p className="text-sm font-semibold">Outbound stops</p><p className="mt-1 text-xs text-muted-foreground">Choose where this passenger boards and gets off. Stops must follow the travel direction.</p></div>
+                    <label className="grid min-w-0 gap-2"><span className="metro-form-label">Pickup</span><select className="metro-control" value={person.outboundPickupLocationId ?? ""} onChange={event => updateTraveler(index, { outboundPickupLocationId: Number(event.target.value) })} required>
+                      {outboundLocations.slice(0, -1).map(location => <option key={location.id} value={location.id}>{location.label}</option>)}
+                    </select></label>
+                    <label className="grid min-w-0 gap-2"><span className="metro-form-label">Drop-off</span><select className="metro-control" value={person.outboundDropoffLocationId ?? ""} onChange={event => updateTraveler(index, { outboundDropoffLocationId: Number(event.target.value) })} required>
+                      {outboundLocations.filter(location => location.sequence > (outboundLocations.find(item => item.id === person.outboundPickupLocationId)?.sequence ?? 0)).map(location => <option key={location.id} value={location.id}>{location.label}</option>)}
+                    </select></label>
+                  </div>
+                ) : null}
+                {roundTrip && returnLocations.length > 2 ? (
+                  <div className="grid gap-3 rounded-xl bg-secondary/50 p-4 sm:grid-cols-2">
+                    <div className="sm:col-span-2"><p className="text-sm font-semibold">Return stops</p><p className="mt-1 text-xs text-muted-foreground">Choose the return boarding and drop-off locations.</p></div>
+                    <label className="grid min-w-0 gap-2"><span className="metro-form-label">Pickup</span><select className="metro-control" value={person.returnPickupLocationId ?? ""} onChange={event => updateTraveler(index, { returnPickupLocationId: Number(event.target.value) })} required>
+                      {returnLocations.slice(0, -1).map(location => <option key={location.id} value={location.id}>{location.label}</option>)}
+                    </select></label>
+                    <label className="grid min-w-0 gap-2"><span className="metro-form-label">Drop-off</span><select className="metro-control" value={person.returnDropoffLocationId ?? ""} onChange={event => updateTraveler(index, { returnDropoffLocationId: Number(event.target.value) })} required>
+                      {returnLocations.filter(location => location.sequence > (returnLocations.find(item => item.id === person.returnPickupLocationId)?.sequence ?? 0)).map(location => <option key={location.id} value={location.id}>{location.label}</option>)}
+                    </select></label>
+                  </div>
+                ) : null}
               </div>
             ))}
           </section>
@@ -253,6 +313,6 @@ export default function PassengerInfo() {
           </Button>
         </form>
       </main>
-    </PageShell>
+    </CustomerLayout>
   );
 }

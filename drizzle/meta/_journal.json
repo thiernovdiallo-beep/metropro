@@ -120,6 +120,20 @@
       "when": 1791300935335,
       "tag": "0016_chubby_pete_wisdom",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1791484421559,
+      "tag": "0019_route_stops",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1791484421559,
+      "tag": "0020_passenger_stop_locations",
+      "breakpoints": true
     }
   ]
 }

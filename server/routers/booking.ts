@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { FIRST_PARTY_HEADER } from "@shared/const";
 import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
-import { bookings, cities, departures, locations, passengers, payments, refunds, routes, tickets } from "../../drizzle/schema";
+import { bookings, cities, departures, locations, passengers, payments, refunds, routeStops, routes, tickets } from "../../drizzle/schema";
 import { getActiveMembership, getDb } from "../db";
 import { createGuestAccess, hasGuestAccess } from "../services/guest-access";
 import { approvedCheckoutOrigin } from "../services/checkout-origin";
@@ -27,6 +27,10 @@ const passengerSchema = z.object({
   returnSeatType: z.enum(["standard", "front"]).nullable(),
   seatNumber: z.string().trim().min(1).max(10).optional(),
   returnSeatNumber: z.string().trim().min(1).max(10).optional(),
+  outboundPickupLocationId: z.number().int().positive().optional(),
+  outboundDropoffLocationId: z.number().int().positive().optional(),
+  returnPickupLocationId: z.number().int().positive().optional(),
+  returnDropoffLocationId: z.number().int().positive().optional(),
   isMemberTraveler: z.boolean(),
 });
 
@@ -38,7 +42,14 @@ const selectionInput = z.object({
 });
 
 type DepartureDetails = NonNullable<Awaited<ReturnType<typeof loadPricedDeparture>>>;
-type NumberedSelection = SeatSelection & { seatNumber?: string; returnSeatNumber?: string };
+type NumberedSelection = SeatSelection & {
+  seatNumber?: string;
+  returnSeatNumber?: string;
+  outboundPickupLocationId?: number;
+  outboundDropoffLocationId?: number;
+  returnPickupLocationId?: number;
+  returnDropoffLocationId?: number;
+};
 
 function checkedSelections(
   selections: SeatSelection[], count: number, hasReturn: boolean, activeMembership: boolean, name: string | null
@@ -57,6 +68,27 @@ export function requireReversedRoute(outbound: DepartureDetails, ret: DepartureD
   }
   if (ret && ret.departAt <= outbound.arriveAt) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Return must depart after the outbound trip arrives" });
+  }
+}
+
+async function validateStopSelections(departure: DepartureDetails, passengersForLeg: NumberedSelection[], leg: "outbound" | "return") {
+  const db = await getDb();
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+  const stops = await db.select().from(routeStops).where(eq(routeStops.routeId, departure.route.id));
+  const ordered = [
+    { id: departure.route.pickupLocationId, order: 0, pickupAllowed: true, dropoffAllowed: true },
+    ...stops.sort((a, b) => a.stopOrder - b.stopOrder).map(stop => ({ id: stop.locationId, order: stop.stopOrder, pickupAllowed: stop.pickupAllowed, dropoffAllowed: stop.dropoffAllowed })),
+    { id: departure.route.dropoffLocationId, order: stops.length + 1, pickupAllowed: true, dropoffAllowed: true },
+  ];
+  const orderByLocation = new Map(ordered.map(item => [item.id, item.order]));
+  const permissions = new Map(ordered.map(item => [item.id, item]));
+  for (const passenger of passengersForLeg) {
+    const pickup = leg === "outbound" ? passenger.outboundPickupLocationId : passenger.returnPickupLocationId;
+    const dropoff = leg === "outbound" ? passenger.outboundDropoffLocationId : passenger.returnDropoffLocationId;
+    if (pickup == null && dropoff == null) continue;
+    if (pickup == null || dropoff == null || !orderByLocation.has(pickup) || !orderByLocation.has(dropoff) || !permissions.get(pickup)?.pickupAllowed || !permissions.get(dropoff)?.dropoffAllowed || orderByLocation.get(pickup)! >= orderByLocation.get(dropoff)!) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: `${leg === "outbound" ? "Outbound" : "Return"} pickup and drop-off must be valid stops in travel order.` });
+    }
   }
 }
 
@@ -129,6 +161,8 @@ export const bookingRouter = router({
       const ret = input.returnDepartureId ? await loadPricedDeparture(input.returnDepartureId) : null;
       if (input.returnDepartureId && !ret) throw new TRPCError({ code: "NOT_FOUND", message: "Return departure not found" });
       requireReversedRoute(outbound, ret);
+      await validateStopSelections(outbound, input.passengers, "outbound");
+      if (ret) await validateStopSelections(ret, input.passengers, "return");
       const outFront = frontCount(input.passengers, "outbound");
       const retFront = frontCount(input.passengers, "return");
       try {
@@ -146,12 +180,17 @@ export const bookingRouter = router({
           throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Seats cannot be checked right now. Please retry." });
         }
       }
+      const selectedLocationIds = input.passengers.flatMap(p => [p.outboundPickupLocationId, p.outboundDropoffLocationId, p.returnPickupLocationId, p.returnDropoffLocationId].filter((id): id is number => id != null));
+      const selectedLocations = selectedLocationIds.length ? await db.select().from(locations) : [];
+      const selectedLocationMap = new Map(selectedLocations.map(location => [location.id, location]));
       const outboundBreakdown = input.passengers.map(p => ({
         name: `${p.firstName} ${p.lastName}`,
         seatNumber: p.seatNumber ?? null,
         seatType: p.outboundSeatType,
         amountCents: seatFareCents(outbound.route, p.outboundSeatType, p.isMemberTraveler),
         memberFareApplied: p.isMemberTraveler && p.outboundSeatType === "standard",
+        pickupLabel: p.outboundPickupLocationId ? selectedLocationMap.get(p.outboundPickupLocationId)?.label ?? null : null,
+        dropoffLabel: p.outboundDropoffLocationId ? selectedLocationMap.get(p.outboundDropoffLocationId)?.label ?? null : null,
       }));
       const returnBreakdown = ret ? input.passengers.map(p => ({
         name: `${p.firstName} ${p.lastName}`,
@@ -159,6 +198,8 @@ export const bookingRouter = router({
         seatType: p.returnSeatType,
         amountCents: seatFareCents(ret.route, p.returnSeatType!, p.isMemberTraveler),
         memberFareApplied: p.isMemberTraveler && p.returnSeatType === "standard",
+        pickupLabel: p.returnPickupLocationId ? selectedLocationMap.get(p.returnPickupLocationId)?.label ?? null : null,
+        dropoffLabel: p.returnDropoffLocationId ? selectedLocationMap.get(p.returnDropoffLocationId)?.label ?? null : null,
       })) : [];
       return {
         isMember,
@@ -198,6 +239,8 @@ export const bookingRouter = router({
       const ret = input.returnDepartureId ? await loadPricedDeparture(input.returnDepartureId) : null;
       if (input.returnDepartureId && !ret) throw new TRPCError({ code: "NOT_FOUND", message: "Return departure not found" });
       requireReversedRoute(outbound, ret);
+      await validateStopSelections(outbound, input.passengers, "outbound");
+      if (ret) await validateStopSelections(ret, input.passengers, "return");
       if (!ret && input.passengers.some(p => p.returnSeatNumber)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Return seats require a return departure." });
       }
@@ -282,8 +325,12 @@ export const bookingRouter = router({
               returnSeatType: p.returnSeatType,
               departureId: p.seatNumber ? outbound.id : null,
               seatNumber: p.seatNumber ?? null,
+              outboundPickupLocationId: p.outboundPickupLocationId ?? null,
+              outboundDropoffLocationId: p.outboundDropoffLocationId ?? null,
               returnDepartureId: p.returnSeatNumber ? ret!.id : null,
               returnSeatNumber: p.returnSeatNumber ?? null,
+              returnPickupLocationId: p.returnPickupLocationId ?? null,
+              returnDropoffLocationId: p.returnDropoffLocationId ?? null,
               status: "booked",
             });
           }
@@ -329,7 +376,7 @@ export const bookingRouter = router({
             if (!current || current.status !== "pending_payment") return;
             await releaseHoldsInTransaction(tx, outbound.id, input.passengerCount, outFront);
             if (ret) await releaseHoldsInTransaction(tx, ret.id, input.passengerCount, retFront);
-            await tx.update(passengers).set({ departureId: null, seatNumber: null, returnDepartureId: null, returnSeatNumber: null })
+            await tx.update(passengers).set({ departureId: null, seatNumber: null, outboundPickupLocationId: null, outboundDropoffLocationId: null, returnDepartureId: null, returnSeatNumber: null, returnPickupLocationId: null, returnDropoffLocationId: null })
               .where(eq(passengers.bookingId, current.id));
             await tx.update(bookings).set({ status: "canceled", holdExpiresAt: null }).where(eq(bookings.id, current.id));
             await tx.update(payments).set({ status: "failed" }).where(eq(payments.bookingId, current.id));

@@ -156,6 +156,11 @@ export const accountRouter = router({
         .where(eq(passengers.id, ticket.passengerId))
         .limit(1);
       const trip = await tripCard(ticket.departureId);
+      const outboundLeg = ticket.departureId === booking.outboundDepartureId;
+      const pickupLocationId = outboundLeg ? passenger?.outboundPickupLocationId : passenger?.returnPickupLocationId;
+      const dropoffLocationId = outboundLeg ? passenger?.outboundDropoffLocationId : passenger?.returnDropoffLocationId;
+      const [selectedPickup] = pickupLocationId ? await db.select().from(locations).where(eq(locations.id, pickupLocationId)).limit(1) : [null];
+      const [selectedDropoff] = dropoffLocationId ? await db.select().from(locations).where(eq(locations.id, dropoffLocationId)).limit(1) : [null];
       return {
         ticket,
         booking: {
@@ -167,6 +172,8 @@ export const accountRouter = router({
           fareType: booking.fareType,
         },
         passenger,
+        selectedPickup: selectedPickup ?? null,
+        selectedDropoff: selectedDropoff ?? null,
         seatNumber: seatNumberForTicket(ticket, passenger),
         trip,
       };
@@ -279,6 +286,13 @@ export const accountRouter = router({
       }
       return { ok: true };
     }),
+  supportTickets: protectedProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    return db.select({ id: supportTickets.id, subject: supportTickets.subject, message: supportTickets.message,
+      status: supportTickets.status, createdAt: supportTickets.createdAt }).from(supportTickets)
+      .where(eq(supportTickets.userId, ctx.user.id)).orderBy(desc(supportTickets.createdAt));
+  }),
   support: protectedProcedure
     .input(z.object({ subject: z.string().min(3), message: z.string().min(5) }))
     .mutation(async ({ ctx, input }) => {
@@ -335,7 +349,7 @@ export const accountRouter = router({
               frontSeatsSold = GREATEST(frontSeatsSold - ${front}, 0) WHERE id = ${id}`);
           await restore(current.outboundDepartureId, current.outboundFrontSeats);
           if (current.returnDepartureId) await restore(current.returnDepartureId, current.returnFrontSeats);
-          await tx.update(passengers).set({ departureId: null, seatNumber: null, returnDepartureId: null, returnSeatNumber: null })
+          await tx.update(passengers).set({ departureId: null, seatNumber: null, outboundPickupLocationId: null, outboundDropoffLocationId: null, returnDepartureId: null, returnSeatNumber: null, returnPickupLocationId: null, returnDropoffLocationId: null })
             .where(eq(passengers.bookingId, current.id));
           await tx.update(tickets).set({ status: "voided" }).where(eq(tickets.bookingId, current.id));
           await tx.update(bookings).set({ status: "canceled" }).where(eq(bookings.id, current.id));

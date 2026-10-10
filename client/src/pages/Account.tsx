@@ -1,4 +1,4 @@
-import { PageShell } from "@/components/Brand";
+import { CustomerLayout } from "@/layouts/CustomerLayout";
 import { ActionLink, PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,7 @@ const NAV = [
   ["/account/payments", "Payment methods"],
   ["/account/receipts", "Receipts"],
   ["/account/notifications", "Notifications"],
-  ["/account/support", "Customer support"],
+  ["/support", "Customer support"],
   ["/account/settings", "Member profile"],
 ];
 
@@ -32,9 +32,9 @@ export default function Account() {
   const section = params?.section ?? "";
   if (!isAuthenticated) {
     return (
-      <PageShell>
+      <CustomerLayout>
         <div className="metro-page metro-page--readable">
-          <PageIntro eyebrow="Metro Pro account" title="Your trips" description="Sign in to view your bookings, tickets and member profile." />
+          <PageIntro eyebrow="MetroPro account" title="Your trips" description="Sign in to view your bookings, tickets and member profile." />
           <div className="ticket-card p-5 sm:p-7">
             <div className="flex flex-wrap gap-3">
               <ActionLink href="/#member-sign-in" variant="primary">Member sign in</ActionLink>
@@ -42,11 +42,11 @@ export default function Account() {
             </div>
           </div>
         </div>
-      </PageShell>
+      </CustomerLayout>
     );
   }
   return (
-    <PageShell>
+    <CustomerLayout>
       <div className="metro-page metro-page--wide grid min-w-0 gap-7 lg:grid-cols-[235px_minmax(0,1fr)] lg:gap-10">
         <aside className="ticket-card min-w-0 self-start p-2">
           <p className="px-3 pt-2 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Account navigation</p>
@@ -67,21 +67,22 @@ export default function Account() {
           {section === "payments" ? <Payments /> : null}
           {section === "receipts" ? <Receipts /> : null}
           {section === "notifications" ? <Notes /> : null}
-          {section === "support" ? <Support /> : null}
+          {section === "support" ? <SupportLink /> : null}
           {section === "settings" ? <Settings userId={user?.id} userName={user?.name} email={user?.email} phone={user?.phone} /> : null}
           {!section ? <Upcoming name={user?.name} /> : null}
         </section>
       </div>
-    </PageShell>
+    </CustomerLayout>
   );
 }
 
 function Upcoming({ name }: { name?: string | null }) {
   const q = trpc.account.overview.useQuery();
+  const settings = trpc.public.settings.useQuery();
   const trips = [...(q.data?.upcoming ?? [])].sort((a, b) => (a.outbound?.departAt?.getTime() ?? 0) - (b.outbound?.departAt?.getTime() ?? 0));
   return (
     <div>
-      <PageIntro eyebrow="Your Metro Pro account" title={`Welcome${name ? `, ${name.split(" ")[0]}` : ""}`} description="Manage your upcoming travel, digital tickets and Metro Pro membership." />
+      <PageIntro eyebrow="Your MetroPro account" title={`Welcome${name ? `, ${name.split(" ")[0]}` : ""}`} description="Manage your upcoming travel, digital tickets and MetroPro membership." />
       <div className="grid gap-3 sm:grid-cols-3"><div className="ticket-card p-4"><p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Upcoming trips</p><p className="mt-2 font-serif text-2xl">{q.data?.upcoming.length ?? "—"}</p></div><div className="ticket-card p-4"><p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Previous bookings</p><p className="mt-2 font-serif text-2xl">{q.data?.previous.length ?? "—"}</p></div><div className="ticket-card p-4"><p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Membership</p><StatusBadge className="mt-2" status={q.data?.membership?.status ?? "inactive"} label={q.data?.membership?.status ?? "Not subscribed"} /></div></div>
       <h2 className="mt-8 font-serif text-2xl">Upcoming trips</h2>
       {q.isLoading ? <ResourceState loading>{null}</ResourceState> : null}
@@ -102,6 +103,18 @@ function Upcoming({ name }: { name?: string | null }) {
               {item.tickets[0] ? (
                 <Link href={`/ticket/${item.tickets[0].qrToken}`} className="inline-flex min-h-11 items-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground">View first ticket</Link>
               ) : null}
+              {(() => {
+                const cutoffHours = settings.data?.cancelCutoffHours ?? 24;
+                const withinCutoff = Boolean(item.outbound && item.outbound.departAt.getTime() - Date.now() >= cutoffHours * 60 * 60 * 1000);
+                const membership = q.data?.membership;
+                const eligible = withinCutoff && membership?.status === "active" && (membership.freeReschedulesRemaining ?? 0) > 0 && !item.booking.usedFreeReschedule;
+                const reason = !withinCutoff ? `Rescheduling closes ${cutoffHours} hours before departure.`
+                  : membership?.status !== "active" ? "An active MetroPro membership is required for the complimentary reschedule."
+                  : item.booking.usedFreeReschedule || !(membership?.freeReschedulesRemaining ?? 0) ? "Your complimentary reschedule has already been used." : "Reschedule this trip";
+                return eligible
+                  ? <Link href={`/account/booking/${item.booking.id}/reschedule`} className="inline-flex min-h-11 items-center rounded-md border border-input px-4 text-sm font-semibold text-primary">Reschedule</Link>
+                  : <button type="button" disabled title={reason} aria-label={`Reschedule unavailable: ${reason}`} className="inline-flex min-h-11 cursor-not-allowed items-center rounded-md border border-input px-4 text-sm font-semibold text-muted-foreground opacity-70">Reschedule</button>;
+              })()}
             </div>
           </div>
         ))}
@@ -351,30 +364,8 @@ function Notes() {
   );
 }
 
-function Support() {
-  const send = trpc.account.support.useMutation({
-    onSuccess: () => toast.success("Message sent"),
-  });
-  const [subject, setSubject] = useState("");
-  const [message, setMessage] = useState("");
-  return (
-    <div>
-      <PageIntro eyebrow="Need a hand?" title="Customer support" description="Send a question to the Metro Pro team." />
-      <form
-        className="ticket-card grid max-w-xl gap-4 p-5 sm:p-6"
-        onSubmit={e => {
-          e.preventDefault();
-          send.mutate({ subject, message });
-        }}
-      >
-        <div className="form-field"><Label className="metro-form-label" htmlFor="support-subject">Subject</Label><Input id="support-subject" placeholder="Subject" className="metro-control" value={subject} onChange={e => setSubject(e.target.value)} required /></div>
-        <div className="form-field"><Label className="metro-form-label" htmlFor="support-message">Message</Label>
-          <textarea id="support-message" className="metro-control min-h-32 p-3" value={message} onChange={e => setMessage(e.target.value)} required />
-        </div>
-        <Button type="submit" className="min-h-12">Send</Button>
-      </form>
-    </div>
-  );
+function SupportLink() {
+  return <div><PageIntro eyebrow="Need a hand?" title="Customer support" description="Open the dedicated customer support center to send a request and review its status." /><ActionLink href="/support" variant="primary">Open customer support</ActionLink></div>;
 }
 
 function Settings({

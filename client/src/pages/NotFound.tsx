@@ -1,4 +1,4 @@
-import { PageShell } from "@/components/Brand";
+import { CustomerLayout } from "@/layouts/CustomerLayout";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Home } from "lucide-react";
 import { useLocation } from "wouter";
@@ -11,7 +11,7 @@ export default function NotFound() {
   };
 
   return (
-    <PageShell>
+    <CustomerLayout>
       <div className="metro-page metro-page--readable flex min-h-[60vh] items-center justify-center">
         <section className="ticket-card w-full max-w-lg px-6 py-9 text-center sm:px-10" aria-labelledby="not-found-title">
           <AlertCircle className="mx-auto mb-5 size-12 text-destructive" aria-hidden="true" />
@@ -30,6 +30,6 @@ export default function NotFound() {
           </div>
         </section>
       </div>
-    </PageShell>
+    </CustomerLayout>
   );
 }

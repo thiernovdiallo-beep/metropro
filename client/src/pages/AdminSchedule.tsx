@@ -1,4 +1,4 @@
-import { PageShell } from "@/components/Brand";
+import { AdminLayout } from "@/layouts/AdminLayout";
 import { PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,6 @@ import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
-import { AdminNav } from "./AdminPages";
 
 export default function AdminSchedule() {
   const q = trpc.admin.schedule.useQuery();
@@ -21,8 +20,7 @@ export default function AdminSchedule() {
   const cancel = trpc.admin.cancelDeparture.useMutation({ onSuccess: async () => { await refresh(); toast.success("Empty departure canceled"); }, onError: error => toast.error(error.message) });
   const cityName = (id: number) => cities.data?.find(city => city.id === id)?.name ?? "Unknown city";
   const routeLabel = (id: number) => { const route = routes.data?.find(item => item.id === id); return route ? `${cityName(route.originCityId)} → ${cityName(route.destinationCityId)}` : `Route ${id}`; };
-  return <PageShell><div className="metro-page metro-page--wide"><AdminNav />
-    <PageIntro eyebrow="Operations" title="Trip schedule" description="View the next 60 departures. All schedule times are Eastern (New York/Columbus). Edits and cancellation are available only for future scheduled trips with no sold or held seats." actions={<Link href="/admin/routes" className="metro-action-link">Create a departure</Link>} />
+  return <AdminLayout><div className="metro-page metro-page--wide">    <PageIntro eyebrow="Operations" title="Trip schedule" description="View the next 60 departures. All schedule times are Eastern (New York/Columbus). Edits and cancellation are available only for future scheduled trips with no sold or held seats." actions={<Link href="/admin/routes" className="metro-action-link">Create a departure</Link>} />
     {routes.error || cities.error || vehicles.error || drivers.error ? <StatusNotice tone="error" className="mb-5">Some scheduling options could not be loaded. Refresh before saving an assignment.</StatusNotice> : null}
     <ResourceState loading={q.isLoading} error={q.error ? "The schedule could not be loaded." : null} empty={!q.data?.length} emptyTitle="No upcoming departures" emptyDescription="Create a departure under Routes to begin building the schedule." onRetry={() => void q.refetch()}>
       <div className="grid gap-4">{(q.data ?? []).map(item => <ScheduleCard key={item.departure.id} item={item} routes={routes.data ?? []} routeLabel={routeLabel}
@@ -32,7 +30,7 @@ export default function AdminSchedule() {
           if (window.confirm(`Cancel unbooked departure #${id}? This cannot be reversed.`)) cancel.mutate({ id });
         }} />)}</div>
     </ResourceState>
-  </div></PageShell>;
+  </div></AdminLayout>;
 }
 
 type ScheduleItem = { departure: { id: number; routeId: number; vehicleId: number | null; driverId: number | null;

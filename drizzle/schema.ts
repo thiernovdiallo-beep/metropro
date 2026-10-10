@@ -1,6 +1,7 @@
 import {
   boolean,
   datetime,
+  double,
   index,
   int,
   json,
@@ -49,6 +50,24 @@ export const memberCredentials = mysqlTable(
   table => [
     uniqueIndex("memberCredentials_userId_unique").on(table.userId),
     uniqueIndex("memberCredentials_email_unique").on(table.emailNormalized),
+  ]
+);
+
+// Customer password-reset tokens are stored only as hashes and are single-use.
+export const passwordResetTokens = mysqlTable(
+  "passwordResetTokens",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+    expiresAt: datetime("expiresAt", { mode: "date" }).notNull(),
+    consumedAt: datetime("consumedAt", { mode: "date" }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("passwordResetTokens_tokenHash_unique").on(table.tokenHash),
+    index("passwordResetTokens_userId_idx").on(table.userId),
+    index("passwordResetTokens_expiry_idx").on(table.expiresAt),
   ]
 );
 
@@ -178,6 +197,8 @@ export const cities = mysqlTable(
     code: varchar("code", { length: 8 }).notNull(),
     name: varchar("name", { length: 120 }).notNull(),
     state: varchar("state", { length: 64 }).notNull(),
+    latitude: double("latitude"),
+    longitude: double("longitude"),
   },
   table => [uniqueIndex("cities_code_unique").on(table.code)]
 );
@@ -187,6 +208,9 @@ export const locations = mysqlTable("locations", {
   cityId: int("cityId").notNull(),
   label: varchar("label", { length: 160 }).notNull(),
   address: varchar("address", { length: 255 }).notNull(),
+  latitude: double("latitude"),
+  longitude: double("longitude"),
+  placeId: varchar("placeId", { length: 255 }),
 });
 
 export const routes = mysqlTable(
@@ -206,6 +230,25 @@ export const routes = mysqlTable(
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   table => [index("routes_od_idx").on(table.originCityId, table.destinationCityId)]
+);
+
+// Ordered intermediate locations used by route visualization and future stop-level booking.
+export const routeStops = mysqlTable(
+  "routeStops",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    routeId: int("routeId").notNull(),
+    locationId: int("locationId").notNull(),
+    stopOrder: int("stopOrder").notNull(),
+    pickupAllowed: boolean("pickupAllowed").default(true).notNull(),
+    dropoffAllowed: boolean("dropoffAllowed").default(true).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("routeStops_route_order_unique").on(table.routeId, table.stopOrder),
+    index("routeStops_route_idx").on(table.routeId),
+    index("routeStops_location_idx").on(table.locationId),
+  ]
 );
 
 export const departures = mysqlTable(
@@ -305,8 +348,12 @@ export const passengers = mysqlTable(
     bookingId: int("bookingId").notNull(),
     departureId: int("departureId"),
     seatNumber: varchar("seatNumber", { length: 10 }),
+    outboundPickupLocationId: int("outboundPickupLocationId"),
+    outboundDropoffLocationId: int("outboundDropoffLocationId"),
     returnDepartureId: int("returnDepartureId"),
     returnSeatNumber: varchar("returnSeatNumber", { length: 10 }),
+    returnPickupLocationId: int("returnPickupLocationId"),
+    returnDropoffLocationId: int("returnDropoffLocationId"),
     firstName: varchar("firstName", { length: 80 }).notNull(),
     lastName: varchar("lastName", { length: 80 }).notNull(),
     outboundSeatType: mysqlEnum("outboundSeatType", ["standard", "front"])

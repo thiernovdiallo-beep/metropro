@@ -8,11 +8,14 @@ const tokens = Object.fromEntries(
 );
 
 describe("Metro Pro visual identity", () => {
-  it("retains the requested navy, blue, surface, text, border and meaningful status colors", () => {
+  it("retains the MetroPro calm green-teal theme", () => {
     expect(tokens).toMatchObject({
-      "--metro-ink": "#0B1F3A",
-      "--primary": "#146EF5",
-      "--accent": "#38BDF8",
+      "--metro-ink": "#0F172A",
+      "--primary": "#16A34A",
+      "--metro-blue": "#0891B2",
+      "--metro-blue-dark": "#0E7490",
+      "--metro-green": "#16A34A",
+      "--accent": "#0891B2",
       "--background": "#F8FAFC",
       "--card": "#FFFFFF",
       "--foreground": "#0F172A",
@@ -24,12 +27,12 @@ describe("Metro Pro visual identity", () => {
     });
   });
 
-  it("keeps selected seats Metro Blue while reserving green, amber and red for seat states", () => {
-    expect(tokens["--metro-selected"]).toBe(tokens["--primary"]);
+  it("keeps available and selected seats green, with held seats amber", () => {
+    expect(tokens["--metro-selected"]).toBe(tokens["--metro-green"]);
     expect(stylesheet).toContain(".metro-seat--selected { border-color: var(--metro-selected)");
-    expect(stylesheet).toContain(".metro-seat--available { border-color: var(--metro-success)");
+    expect(stylesheet).toContain(".metro-seat--available { border-color: var(--metro-green)");
     expect(stylesheet).toContain(".metro-seat--held { border-color: var(--metro-warning)");
-    expect(stylesheet).toContain(".metro-seat--taken { border-color: var(--metro-error)");
+    expect(stylesheet).toContain(".metro-seat--taken { border-color: #94A3B8");
     expect(stylesheet).toContain(".metro-status--success { border-color: var(--metro-success)");
     expect(stylesheet).toContain(".metro-status--pending { border-color: var(--metro-warning)");
     expect(stylesheet).toContain(".metro-status--error { border-color: var(--metro-error)");

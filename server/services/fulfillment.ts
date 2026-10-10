@@ -45,7 +45,7 @@ export async function fulfillTicketPayment(opts: {
         WHERE id = ${departureId}`);
       await release(booking.outboundDepartureId, booking.passengerCount, booking.outboundFrontSeats);
       if (booking.returnDepartureId) await release(booking.returnDepartureId, booking.passengerCount, booking.returnFrontSeats);
-      await tx.update(passengers).set({ departureId: null, seatNumber: null, returnDepartureId: null, returnSeatNumber: null })
+      await tx.update(passengers).set({ departureId: null, seatNumber: null, outboundPickupLocationId: null, outboundDropoffLocationId: null, returnDepartureId: null, returnSeatNumber: null, returnPickupLocationId: null, returnDropoffLocationId: null })
         .where(eq(passengers.bookingId, booking.id));
       await tx.update(payments).set({ status: "failed" }).where(eq(payments.bookingId, booking.id));
       await tx.update(bookings).set({ status: "canceled", holdExpiresAt: null }).where(eq(bookings.id, booking.id));
@@ -160,7 +160,7 @@ export async function failTicketPayment(bookingId: number) {
     };
     await release(booking.outboundDepartureId, booking.passengerCount, booking.outboundFrontSeats);
     if (booking.returnDepartureId) await release(booking.returnDepartureId, booking.passengerCount, booking.returnFrontSeats);
-    await tx.update(passengers).set({ departureId: null, seatNumber: null, returnDepartureId: null, returnSeatNumber: null })
+    await tx.update(passengers).set({ departureId: null, seatNumber: null, outboundPickupLocationId: null, outboundDropoffLocationId: null, returnDepartureId: null, returnSeatNumber: null, returnPickupLocationId: null, returnDropoffLocationId: null })
       .where(eq(passengers.bookingId, booking.id));
     await tx.update(bookings).set({ status: "canceled", holdExpiresAt: null }).where(eq(bookings.id, booking.id));
     await tx.update(payments).set({ status: "failed" }).where(eq(payments.bookingId, booking.id));

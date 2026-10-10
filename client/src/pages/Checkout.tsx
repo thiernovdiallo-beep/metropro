@@ -1,4 +1,4 @@
-import { PageShell } from "@/components/Brand";
+import { CustomerLayout } from "@/layouts/CustomerLayout";
 import { ActionLink, BookingProgress, PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatTime, money } from "@/lib/format";
@@ -118,19 +118,19 @@ export default function Checkout() {
 
   if (!draft) {
     return (
-      <PageShell>
+      <CustomerLayout>
         <main className="metro-page metro-page--readable">
           <PageIntro eyebrow="Your trip" title="Review your booking" description="Your booking details are kept only while you move through the secure checkout flow." />
           <ResourceState empty emptyTitle="No booking in progress" emptyDescription="Start a new search to choose a departure and traveler details."><></></ResourceState>
           <ActionLink href="/" variant="primary" className="mt-5">Start over</ActionLink>
         </main>
-      </PageShell>
+      </CustomerLayout>
     );
   }
 
   const q = quote.data;
   return (
-    <PageShell>
+    <CustomerLayout>
       <main className="metro-page metro-page--readable">
         <BookingProgress current="Review" />
         <PageIntro eyebrow="Your trip · Step 5" title="Review your booking" description="Confirm your itinerary, traveler details, and total before opening Stripe Checkout." />
@@ -173,11 +173,11 @@ export default function Checkout() {
           </StatusNotice>
         ) : null}
       </main>
-    </PageShell>
+    </CustomerLayout>
   );
 }
 
-function SeatRows({ rows }: { rows: { name: string; seatNumber: string | null; seatType: string | null; amountCents: number; memberFareApplied: boolean }[] }) {
+function SeatRows({ rows }: { rows: { name: string; seatNumber: string | null; seatType: string | null; amountCents: number; memberFareApplied: boolean; pickupLabel?: string | null; dropoffLabel?: string | null }[] }) {
   return (
     <div className="mt-3 grid gap-3">
       {rows.map((row, index) => (
@@ -185,6 +185,7 @@ function SeatRows({ rows }: { rows: { name: string; seatNumber: string | null; s
           <div className="min-w-0">
             <span className="font-medium">{row.name}</span>
             <span className="ml-2 text-muted-foreground">{row.seatNumber ? `Seat ${row.seatNumber}` : row.seatType === "front" ? "Front passenger seat" : "Regular seat"}{row.memberFareApplied ? " · member fare" : ""}</span>
+            {(row.pickupLabel || row.dropoffLabel) ? <span className="block text-xs text-muted-foreground">Pickup {row.pickupLabel ?? "route origin"} · Drop-off {row.dropoffLabel ?? "route destination"}</span> : null}
           </div>
           <span className="font-semibold tabular-nums">{money(row.amountCents)}</span>
         </div>

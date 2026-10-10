@@ -22,6 +22,7 @@ export const TEMPLATES = {
   refund: "refund",
   membership_renewal: "membership_renewal",
   membership_payment_failed: "membership_payment_failed",
+  password_reset_requested: "password_reset_requested",
 } as const;
 
 export async function notify(input: NoticeInput) {

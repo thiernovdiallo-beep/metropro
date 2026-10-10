@@ -1,6 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import { PageShell } from "@/components/Brand";
-import { ActionLink, PageIntro, StatusNotice } from "@/components/MetroUI";
+import { DriverAuthLayout } from "@/layouts/DriverLayout";
+import { PageIntro, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,7 +35,7 @@ export default function DriverLogin() {
       setError(cause instanceof Error ? cause.message : "Could not sign in.");
     }
   }
-  return <PageShell><section className="metro-page metro-page--readable flex min-h-[60vh] items-center">
+  return <DriverAuthLayout><section className="metro-page metro-page--readable flex min-h-[60vh] items-center">
     <div className="mx-auto w-full max-w-lg"><PageIntro eyebrow="Assigned crew" title="Driver sign in" description="Only drivers invited by Metro Pro operations can access trip manifests and scan passenger tickets." />
       <div className="ticket-card p-5 sm:p-7">
       {user && user.role !== "driver" && user.role !== "admin" ? <StatusNotice>This account has no driver access. Sign in with the driver account your administrator created.</StatusNotice> : null}
@@ -47,8 +47,7 @@ export default function DriverLogin() {
         <Button className="min-h-12 w-full" disabled={signIn.isPending || loading}>{signIn.isPending ? "Signing in…" : "Open driver portal"}</Button>
       </form>
       <p className="mt-5 text-xs leading-relaxed text-muted-foreground">Need an account or a new setup link? Ask your administrator.</p>
-      <ActionLink href="/" className="mt-4">Back to booking</ActionLink>
-      </div>
+            </div>
     </div>
-  </section></PageShell>;
+  </section></DriverAuthLayout>;
 }

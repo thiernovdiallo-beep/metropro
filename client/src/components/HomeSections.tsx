@@ -89,7 +89,7 @@ export function WhyMetroPro() {
           {REASONS.map(({ icon: Icon, title, text }) => (
             <div key={title} className="border-t-2 border-primary/60 pt-5">
               <Icon size={30} strokeWidth={1.7} className="text-primary" aria-hidden="true" />
-              <h3 className="mt-4 text-lg font-bold text-[#0B1F3A]">{title}</h3>
+              <h3 className="mt-4 text-lg font-bold text-[#2D3E40]">{title}</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{text}</p>
             </div>
           ))}
@@ -114,8 +114,8 @@ export function HowItWorks() {
         <div className="mt-9 grid gap-7 md:grid-cols-3">
           {STEPS.map(([number, title, description]) => (
             <div key={number} className="border-t border-border pt-4">
-              <span className="font-serif text-5xl text-[#38BDF8]" aria-hidden="true">{number}</span>
-              <h3 className="mt-3 text-lg font-bold uppercase tracking-wide text-[#0B1F3A]">{title}</h3>
+              <span className="font-serif text-5xl text-[#16A34A]" aria-hidden="true">{number}</span>
+              <h3 className="mt-3 text-lg font-bold uppercase tracking-wide text-[#2D3E40]">{title}</h3>
               <p className="mt-2 text-muted-foreground">{description}</p>
             </div>
           ))}
@@ -127,16 +127,16 @@ export function HowItWorks() {
 
 export function DigitalTicketStory({ route }: { route?: RouteInfo }) {
   return (
-    <section id="ticket-explainer" className="scroll-mt-24 overflow-hidden bg-[#0B1F3A] py-16 text-white md:py-20" aria-labelledby="ticket-story-title">
+    <section id="ticket-explainer" className="scroll-mt-24 overflow-hidden bg-[#0891B2] py-16 text-white md:py-20" aria-labelledby="ticket-story-title">
       <div className="container grid items-center gap-12 lg:grid-cols-2">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#38BDF8]">Ready to board</p>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#DCFCE7]">Ready to board</p>
           <h2 id="ticket-story-title" className="mt-4 max-w-xl font-serif text-4xl leading-tight md:text-5xl">Your ticket, always with you.</h2>
           <p className="mt-5 max-w-lg text-lg leading-relaxed text-white/80">Receive your Metro Pro ticket digitally and present your QR code when boarding.</p>
-          <Link href="/account/tickets" className="mt-8 inline-flex min-h-12 items-center rounded-lg bg-white px-6 font-bold text-[#0B1F3A] hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">View my booking <ArrowRight size={17} className="ml-2" aria-hidden="true" /></Link>
+          <Link href="/account/tickets" className="mt-8 inline-flex min-h-12 items-center rounded-lg bg-white px-6 font-bold text-[#166534] hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">View my booking <ArrowRight size={17} className="ml-2" aria-hidden="true" /></Link>
           <p className="mt-3 text-sm text-white/65">For guest tickets, use the private booking link provided at checkout.</p>
         </div>
-        <div className="mx-auto w-full max-w-sm rounded-[2rem] border-[8px] border-[#0B1F3A] bg-white p-4 text-foreground shadow-2xl" aria-label="Illustration of the information shown on a paid Metro Pro digital ticket; this is not a boarding pass">
+        <div className="mx-auto w-full max-w-sm rounded-[2rem] border-[8px] border-[#A8C5D6] bg-white p-4 text-foreground shadow-2xl" aria-label="Illustration of the information shown on a paid Metro Pro digital ticket; this is not a boarding pass">
           <div className="flex items-center justify-between gap-2 border-b border-dashed border-border pb-4">
             <Wordmark className="h-7 w-auto max-w-[145px]" />
             <span className="rounded-md bg-secondary px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-primary">Ticket preview</span>
@@ -163,7 +163,7 @@ export function TravelInformation() {
   const cards = [
     { icon: MapPinned, title: "Routes & schedules", text: "Find available routes and departure times.", href: "/#trip-search", link: "Search departures" },
     { icon: CalendarDays, title: "Boarding", text: "Find your pickup point and bring your QR ticket to board.", href: "/#ticket-explainer", link: "About digital tickets" },
-    { icon: CircleHelp, title: "Support", text: "Need help with your journey or booking? Members can contact support from their account.", href: "/account/support", link: "Go to support" },
+    { icon: CircleHelp, title: "Support", text: "Need help with your journey or booking? Members can contact support from their account.", href: "/support", link: "Go to support" },
   ];
   return (
     <section id="contact" className="scroll-mt-24 bg-background py-16 md:py-20" aria-labelledby="travel-info-title">
@@ -183,9 +183,9 @@ export function TravelInformation() {
         <div id="frequently-asked-questions" className="mt-10 scroll-mt-24 border-t border-border pt-8">
           <h3 className="font-serif text-2xl">Common questions</h3>
           <div className="mt-5 grid gap-4 text-sm text-muted-foreground md:grid-cols-3">
-            <p><strong className="block text-[#0B1F3A]">Can I book without an account?</strong> Yes. Save the private booking link provided at checkout to access your trip later.</p>
-            <p><strong className="block text-[#0B1F3A]">When do I select a seat?</strong> Choose an available numbered seat after selecting your departure.</p>
-            <p><strong className="block text-[#0B1F3A]">Where is my QR ticket?</strong> It appears on your digital ticket after payment is confirmed.</p>
+            <p><strong className="block text-[#2D3E40]">Can I book without an account?</strong> Yes. Save the private booking link provided at checkout to access your trip later.</p>
+            <p><strong className="block text-[#2D3E40]">When do I select a seat?</strong> Choose an available numbered seat after selecting your departure.</p>
+            <p><strong className="block text-[#2D3E40]">Where is my QR ticket?</strong> It appears on your digital ticket after payment is confirmed.</p>
           </div>
         </div>
       </div>
@@ -195,10 +195,10 @@ export function TravelInformation() {
 
 export function FinalBookingCta() {
   return (
-    <section className="bg-[#0B1F3A] px-4 py-16 text-center text-white md:py-20" aria-labelledby="final-cta-title">
+    <section className="bg-[#16A34A] px-4 py-16 text-center text-white md:py-20" aria-labelledby="final-cta-title">
       <h2 id="final-cta-title" className="font-serif text-3xl md:text-4xl">Ready for your next journey?</h2>
       <p className="mt-3 text-white/80">Book your Metro Pro trip today.</p>
-      <a href="/#trip-search" className="mt-7 inline-flex min-h-12 items-center justify-center rounded-lg bg-white px-7 text-sm font-bold uppercase tracking-wide text-[#0B1F3A] hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Book your trip <ArrowRight size={17} className="ml-2" aria-hidden="true" /></a>
+      <a href="/#trip-search" className="mt-7 inline-flex min-h-12 items-center justify-center rounded-lg bg-white px-7 text-sm font-bold uppercase tracking-wide text-[#166534] hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Book your trip <ArrowRight size={17} className="ml-2" aria-hidden="true" /></a>
     </section>
   );
 }

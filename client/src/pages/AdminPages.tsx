@@ -1,43 +1,26 @@
-import { PageShell } from "@/components/Brand";
+import { AdminLayout } from "@/layouts/AdminLayout";
 import { DriverAccountForm } from "@/components/DriverAccountForm";
 import { DriverPortrait } from "@/components/DriverPortrait";
 import { PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import DispatchAssignment from "@/components/DispatchAssignment";
 import RouteCreateForm from "@/components/RouteCreateForm";
+import RouteStopsEditor from "@/components/RouteStopsEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDate, formatTime, money, parseServiceDateTimeInput } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
-import { Link, useLocation, useRoute } from "wouter";
+import { Link, useRoute } from "wouter";
 import { toast } from "sonner";
 import { lazy, Suspense, useState } from "react";
 
 const AnalyticsDashboard = lazy(() => import("@/components/AnalyticsDashboard"));
-
-const ADMIN_LINKS = [
-  ["Ops", "/admin"], ["Dispatch", "/admin/dispatch"], ["Schedule", "/admin/schedule"],
-  ["Bookings", "/admin/bookings"], ["Payments", "/admin/payments"], ["Support", "/admin/support"],
-  ["Fleet", "/admin/fleet"], ["Routes", "/admin/routes"], ["Analytics", "/admin/analytics"], ["Settings", "/admin/settings"],
-] as const;
-
-export function AdminNav() {
-  const [location] = useLocation();
-  return <nav className="metro-nav-scroll mb-7 -mx-1 px-1" aria-label="Operations sections">
-    {ADMIN_LINKS.map(([label, href]) => {
-      const active = href === "/admin" ? location === href || location.startsWith("/admin/trips/") : location === href || location.startsWith(`${href}/`);
-      return <Link key={href} href={href} aria-current={active ? "page" : undefined}
-        className={active ? "bg-secondary text-primary" : "text-foreground/75 hover:text-primary"}>{label}</Link>;
-    })}
-  </nav>;
-}
 
 export function AdminTrip() {
   const [, params] = useRoute("/admin/trips/:id");
   const id = Number(params?.id);
   const trip = trpc.admin.trip.useQuery({ id }, { enabled: Boolean(id) });
   const t = trip.data;
-  return <PageShell><div className="metro-page metro-page--wide">
-    <AdminNav />
+  return <AdminLayout><div className="metro-page metro-page--wide">
     <PageIntro eyebrow="Operations" title={t ? `${t.origin?.name} → ${t.destination?.name}` : "Trip details"}
       description={t ? <>Vehicle {t.vehicle?.code ?? "unassigned"} · Driver {t.driver?.fullName ?? "unassigned"} · {t.seatsSold} sold · {t.seatsRemaining} remaining · {money(t.revenueCents)}</> : "Review assignments, passenger records, and the manifest for this departure."} />
     <ResourceState loading={trip.isLoading} error={trip.error ? "Trip details could not be loaded." : null} empty={!t} emptyTitle="Trip unavailable" emptyDescription="This departure may have been removed or is not available to your account." onRetry={() => void trip.refetch()}>
@@ -48,13 +31,12 @@ export function AdminTrip() {
         </div>)}</div>
       </section> : null}
     </ResourceState>
-  </div></PageShell>;
+  </div></AdminLayout>;
 }
 
 export function AdminDispatch() {
   const board = trpc.admin.dispatchBoard.useQuery();
-  return <PageShell><div className="metro-page metro-page--wide">
-    <AdminNav />
+  return <AdminLayout><div className="metro-page metro-page--wide">
     <PageIntro eyebrow="Operations" title="Dispatch board" description="Review vehicle readiness and active assignments, then make changes using the assignment controls." />
     <DispatchAssignment />
     <div className="mt-6"><ResourceState loading={board.isLoading} error={board.error ? "The dispatch board could not be loaded." : null} empty={!board.data?.length} emptyTitle="No dispatch cards" emptyDescription="Active vehicles and assignments will appear here." onRetry={() => void board.refetch()}>
@@ -67,7 +49,7 @@ export function AdminDispatch() {
         {card.currentDepartureId ? <Link href={`/admin/trips/${card.currentDepartureId}`} className="metro-action-link mt-4">Open trip</Link> : null}
       </article>)}</div>
     </ResourceState></div>
-  </div></PageShell>;
+  </div></AdminLayout>;
 }
 
 export function AdminFleet() {
@@ -85,10 +67,9 @@ export function AdminFleet() {
   const [status, setStatus] = useState<"available" | "maintenance" | "out_of_service">("available");
   const [setupLink, setSetupLink] = useState("");
   return (
-    <PageShell>
+    <AdminLayout>
       <div className="metro-page metro-page--wide">
-        <AdminNav />
-        <PageIntro eyebrow="Operations" title="Fleet" description="Manage vehicle records, driver access, and maintenance readiness." />
+            <PageIntro eyebrow="Operations" title="Fleet" description="Manage vehicle records, driver access, and maintenance readiness." />
         <div className="mt-4"><ResourceState loading={vans.isLoading} error={vans.error ? "Vehicle records could not be loaded." : null} empty={!vans.data?.length} emptyTitle="No vehicles yet" emptyDescription="Create a vehicle record to start building the fleet." onRetry={() => void vans.refetch()}>
           <div className="grid gap-3">{(vans.data ?? []).map(v => (
             <Link key={v.id} href={`/admin/fleet/${v.id}`} className="ticket-card block p-4">
@@ -147,7 +128,7 @@ export function AdminFleet() {
         </div> : null}
         <DriverAccountForm drivers={drivers.data ?? []} onCreated={() => { void drivers.refetch(); setSetupLink(""); }} />
       </div>
-    </PageShell>
+    </AdminLayout>
   );
 }
 
@@ -174,10 +155,9 @@ export function AdminVehicle() {
   const [performedAt, setPerformedAt] = useState("");
   const date = (value: Date | null) => value?.toISOString().slice(0, 10) ?? "";
   return (
-    <PageShell>
+    <AdminLayout>
       <div className="metro-page metro-page--wide">
-        <AdminNav />
-        <PageIntro eyebrow="Fleet" title={v?.code ?? "Vehicle details"} description={v ? `${v.year} ${v.make} ${v.model} · ${v.capacity} paying passenger seats` : "Review vehicle details, compliance dates, and maintenance records."} />
+            <PageIntro eyebrow="Fleet" title={v?.code ?? "Vehicle details"} description={v ? `${v.year} ${v.make} ${v.model} · ${v.capacity} paying passenger seats` : "Review vehicle details, compliance dates, and maintenance records."} />
         {!v ? <ResourceState loading={q.isLoading} error={q.error ? "Vehicle details could not be loaded." : null} empty={!q.isLoading && !q.error} emptyTitle="Vehicle unavailable" emptyDescription="This vehicle may have been removed or is not available to your account." onRetry={() => void q.refetch()}><></></ResourceState> : null}
         {v ? (
           <form className="ticket-card mt-4 grid gap-4 p-5 text-sm sm:grid-cols-2 lg:grid-cols-3" onSubmit={event => { event.preventDefault(); save.mutate({
@@ -228,7 +208,7 @@ export function AdminVehicle() {
           </Link>
         ))}
       </div>
-    </PageShell>
+    </AdminLayout>
   );
 }
 
@@ -245,17 +225,16 @@ export function AdminRoutes() {
   const addLocation = trpc.admin.addLocation.useMutation({ onSuccess: () => { void locs.refetch(); toast.success("Location added"); }, onError: error => toast.error(error.message) });
   const cityName = (id: number) => cities.data?.find(city => city.id === id)?.name ?? "Unknown city";
   return (
-    <PageShell>
+    <AdminLayout>
       <div className="metro-page metro-page--wide">
-        <AdminNav />
-        <PageIntro eyebrow="Operations" title="Routes" description="Set the published network, fares, pickup locations, and future departures." />
+            <PageIntro eyebrow="Operations" title="Routes" description="Set the published network, fares, pickup locations, and future departures." />
         {routes.isLoading ? <ResourceState loading><></></ResourceState> : null}
         {routes.error || cities.error || locs.error ? <StatusNotice tone="error" className="mb-4">Some route configuration records could not be loaded. Refresh before making changes.</StatusNotice> : null}
         {(routes.data ?? []).map(r => (
           <div key={r.id}>
             <RouteFareRow route={r} label={`${cityName(r.originCityId)} → ${cityName(r.destinationCityId)}`} onSave={next => save.mutate(next)} />
             <button type="button" className="inline-flex min-h-11 items-center text-sm font-semibold text-primary underline" aria-expanded={editRouteId === r.id} onClick={() => setEditRouteId(current => current === r.id ? null : r.id)}>{editRouteId === r.id ? "Close route editor" : "Edit cities, stops & duration"}</button>
-            {editRouteId === r.id ? <><p className="mt-2 text-xs text-muted-foreground">Existing departures keep their booked itinerary. To change cities, stops or duration after trips have been scheduled, create a new route instead; fares and activation can still be updated here.</p><RouteCreateForm key={r.id} cities={cities.data ?? []} locations={locs.data ?? []} initial={r} onSave={next => save.mutate(next)} /></> : null}
+            {editRouteId === r.id ? <><p className="mt-2 text-xs text-muted-foreground">Existing departures keep their booked itinerary. To change cities, stops or duration after trips have been scheduled, create a new route instead; fares and activation can still be updated here.</p><RouteCreateForm key={r.id} cities={cities.data ?? []} locations={locs.data ?? []} initial={r} onSave={next => save.mutate(next)} /><RouteStopsEditor routeId={r.id} locations={(locs.data ?? []).filter(location => location.cityId !== r.originCityId && location.cityId !== r.destinationCityId)} /></> : null}
           </div>
         ))}
         {!routes.isLoading && !routes.data?.length ? <p className="ticket-card mt-4 p-4 text-sm">No routes configured. Add cities and pickup/drop-off locations before creating a route.</p> : null}
@@ -274,7 +253,7 @@ export function AdminRoutes() {
           onCreate={v => createDep.mutate(v)}
         />
       </div>
-    </PageShell>
+    </AdminLayout>
   );
 }
 
@@ -449,12 +428,11 @@ function DepartureForm({
 
 export function AdminAnalytics() {
   return (
-    <PageShell>
+    <AdminLayout>
       <div className="metro-page metro-page--wide">
-        <AdminNav />
-        <Suspense fallback={<div role="status" className="ticket-card flex min-h-28 items-center p-5 text-sm text-muted-foreground">Loading analytics…</div>}><AnalyticsDashboard /></Suspense>
+            <Suspense fallback={<div role="status" className="ticket-card flex min-h-28 items-center p-5 text-sm text-muted-foreground">Loading analytics…</div>}><AnalyticsDashboard /></Suspense>
       </div>
-    </PageShell>
+    </AdminLayout>
   );
 }
 
@@ -472,10 +450,9 @@ export function AdminSettings() {
   const [front, setFront] = useState<number | null>(null);
   const [membership, setMembership] = useState<number | null>(null);
   return (
-    <PageShell>
+    <AdminLayout>
       <div className="metro-page metro-page--wide">
-        <AdminNav />
-        <PageIntro eyebrow="Operations" title="Settings" description={<>Existing trip fares are configured per route in <Link href="/admin/routes" className="font-semibold text-primary underline">Routes</Link>; changing default fares here does not reprice booked tickets. New membership prices apply to new subscriptions, not existing ones.</>} />
+            <PageIntro eyebrow="Operations" title="Settings" description={<>Existing trip fares are configured per route in <Link href="/admin/routes" className="font-semibold text-primary underline">Routes</Link>; changing default fares here does not reprice booked tickets. New membership prices apply to new subscriptions, not existing ones.</>} />
         {!s ? <ResourceState loading={q.isLoading} error={q.error ? "Settings could not be loaded." : null} empty={!q.isLoading && !q.error} emptyTitle="Settings unavailable" onRetry={() => void q.refetch()}><></></ResourceState> : null}
         {s ? (
           <div className="ticket-card mt-4 grid max-w-xl gap-4 p-5 sm:grid-cols-2">
@@ -551,6 +528,6 @@ export function AdminSettings() {
           ))}
         </div>
       </div>
-    </PageShell>
+    </AdminLayout>
   );
 }

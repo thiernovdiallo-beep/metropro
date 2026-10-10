@@ -1,4 +1,4 @@
-import { PageShell } from "@/components/Brand";
+import { DriverLayout } from "@/layouts/DriverLayout";
 import { PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -128,7 +128,7 @@ export default function DriverTrip() {
   const passengerCount = t?.manifest?.length ?? 0;
 
   return (
-    <PageShell>
+    <DriverLayout>
       <div className="container py-8 sm:py-10 lg:py-12">
         <ResourceState
           loading={trip.isLoading}
@@ -156,6 +156,7 @@ export default function DriverTrip() {
                 </Button>
               }
             />
+            {t?.stops?.length ? <div className="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground" aria-label="Route stop sequence"><span className="font-semibold text-foreground">Route sequence:</span><span>{t.origin?.name}</span>{t.stops.map(stop => <span key={stop.id}>→ {stop.location?.label ?? `Stop ${stop.stopOrder}`}</span>)}<span>→ {t.destination?.name}</span></div> : null}
 
             <section className="ticket-card p-5 sm:p-6" aria-label="Trip boarding summary">
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -237,6 +238,7 @@ export default function DriverTrip() {
                         <StatusBadge status={p.status} />
                         {p.boardedAt ? <span className="text-xs font-medium text-muted-foreground">{formatTime(p.boardedAt)}</span> : null}
                       </div>
+                      {p.pickupLocation || p.dropoffLocation ? <div className="mt-2 text-xs text-muted-foreground">Pickup: {p.pickupLocation ?? "Origin"} · Drop-off: {p.dropoffLocation ?? "Destination"}</div> : null}
                     </div>
                     {p.status !== "boarded" ? (
                       <div className="no-print flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
@@ -280,6 +282,6 @@ export default function DriverTrip() {
           </>
         </ResourceState>
       </div>
-    </PageShell>
+    </DriverLayout>
   );
 }

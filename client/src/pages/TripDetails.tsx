@@ -1,4 +1,4 @@
-import { PageShell } from "@/components/Brand";
+import { CustomerLayout } from "@/layouts/CustomerLayout";
 import { ActionLink, BookingProgress, PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { formatDateLong, formatTime, money } from "@/lib/format";
@@ -19,7 +19,7 @@ export default function TripDetails() {
   const canContinue = outbound.data && (!returnId || inbound.data) && count >= 1 && count <= 11 &&
     outbound.data.seatsRemaining >= count && [outbound.data, ...(returnId ? [inbound.data] : [])].every(trip => trip && trip.seatsRemaining >= count && ["scheduled", "boarding", "delayed"].includes(trip.status));
   const loading = outbound.isLoading || (returnId && inbound.isLoading);
-  return <PageShell><main className="metro-page metro-page--readable">
+  return <CustomerLayout><main className="metro-page metro-page--readable">
     <BookingProgress current="Trip" />
     <PageIntro eyebrow="Your itinerary · Step 2" title="Trip details" description={`${count} passenger${count === 1 ? "" : "s"} · Review your actual departures before choosing seats.`} />
     {loading ? <ResourceState loading>Loading departure details…</ResourceState> : null}
@@ -31,7 +31,7 @@ export default function TripDetails() {
       <ActionLink href={back} back>Back to results</ActionLink>
       {canContinue ? <ActionLink href={`/seats?${params}`} variant="primary">Continue to seat selection</ActionLink> : <Button className="min-h-11" disabled>Continue to seat selection</Button>}
     </div>
-  </main></PageShell>;
+  </main></CustomerLayout>;
 }
 
 function TripCard({ label, trip }: { label: string; trip: {

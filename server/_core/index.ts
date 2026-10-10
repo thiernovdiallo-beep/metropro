@@ -16,6 +16,7 @@ import { driverProfiles } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { eq } from "drizzle-orm";
 import { sdk } from "./sdk";
+import { fetchStaticMap, makeRequest, type DirectionsResult } from "./map";
 
 async function startServer() {
   const app = express();
@@ -33,6 +34,42 @@ async function startServer() {
   app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
   app.get("/api/platform/config.js", (_req, res) => {
     res.set("Cache-Control", "no-store").type("application/javascript").send(publicPlatformScript());
+  });
+
+  app.get("/api/route-map", async (req, res) => {
+    try {
+      const rawMarkers = Array.isArray(req.query.marker) ? req.query.marker : [req.query.marker];
+      const markers = rawMarkers.filter((value): value is string => typeof value === "string").slice(0, 8);
+      const mobile = req.query.mobile === "1";
+      if (!markers.length || markers.some(marker => !/^(origin|stop|destination):[-+]?\d+(?:\.\d+)?,-[-+]?\d+(?:\.\d+)?$/.test(marker))) {
+        res.status(400).end();
+        return;
+      }
+      const staticMarkers = markers.map((marker, index) => {
+        const [, type, coordinates] = marker.match(/^(origin|stop|destination):(.*)$/)!;
+        const label = type === "origin" ? "A" : type === "destination" ? "D" : String(index);
+        const color = type === "origin" ? "blue" : type === "destination" ? "red" : "green";
+        return `color:${color}|label:${label}|${coordinates}`;
+      });
+      const coordinates = markers.map(marker => marker.match(/^(?:origin|stop|destination):(.+)$/)![1]);
+      const directions = await makeRequest<DirectionsResult>("/maps/api/directions/json", {
+        origin: coordinates[0],
+        destination: coordinates[coordinates.length - 1],
+        waypoints: coordinates.length > 2 ? coordinates.slice(1, -1).join("|") : undefined,
+        mode: "driving",
+      }).catch(() => null);
+      const encodedPath = directions?.status === "OK" ? directions.routes[0]?.overview_polyline?.points : null;
+      const image = await fetchStaticMap({
+        markers: staticMarkers,
+        path: encodedPath ? `color:0x111827|weight:6|enc:${encodedPath}` : undefined,
+        zoom: mobile ? 6 : undefined,
+        size: "640x360",
+      });
+      res.set("Cache-Control", "public, max-age=300").type(image.contentType).send(image.body);
+    } catch (error) {
+      console.error("[route map] static map request failed", error instanceof Error ? error.message : "unknown");
+      res.status(502).end();
+    }
   });
 
   app.get("/api/member-id/:userId", async (req, res) => {

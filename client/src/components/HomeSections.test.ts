@@ -42,7 +42,7 @@ describe("Metro Pro homepage marketing sections", () => {
   it("keeps FAQs and support links inside real application sections", () => {
     const html = render(createElement(TravelInformation));
     expect(html).toContain('id="frequently-asked-questions"');
-    expect(html).toContain('href="/account/support"');
+    expect(html).toContain('href="/support"');
     expect(html).toContain('href="/#trip-search"');
   });
 
@@ -51,8 +51,8 @@ describe("Metro Pro homepage marketing sections", () => {
     expect(html).toContain("New York City → Columbus");
     expect(html).toContain("not valid for boarding");
     expect(html).toContain("QR code appears on a confirmed ticket");
-    expect(html).toContain('src="/logo.png"');
-    expect(html).toContain('alt="Metro Pro"');
+    expect(html).toContain("Work in Progress");
+    expect(html).toContain('aria-label="Work in Progress"');
     expect(html).not.toContain("qrToken");
   });
 });

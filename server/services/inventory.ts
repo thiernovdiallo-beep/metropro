@@ -156,7 +156,7 @@ export async function expireStaleHolds(now = new Date()) {
       };
       await release(current.outboundDepartureId, current.passengerCount, current.outboundFrontSeats);
       if (current.returnDepartureId) await release(current.returnDepartureId, current.passengerCount, current.returnFrontSeats);
-      await tx.update(passengers).set({ departureId: null, seatNumber: null, returnDepartureId: null, returnSeatNumber: null })
+      await tx.update(passengers).set({ departureId: null, seatNumber: null, outboundPickupLocationId: null, outboundDropoffLocationId: null, returnDepartureId: null, returnSeatNumber: null, returnPickupLocationId: null, returnDropoffLocationId: null })
         .where(eq(passengers.bookingId, current.id));
       await tx.update(bookings).set({ status: "canceled", holdExpiresAt: null }).where(eq(bookings.id, current.id));
       await tx.update(payments).set({ status: "failed" }).where(eq(payments.bookingId, current.id));

@@ -59,7 +59,7 @@ export async function beginBookingRefund(opts: {
         frontSeatsSold = GREATEST(frontSeatsSold - ${front}, 0) WHERE id = ${id}`);
     await restore(booking.outboundDepartureId, booking.outboundFrontSeats);
     if (booking.returnDepartureId) await restore(booking.returnDepartureId, booking.returnFrontSeats);
-    await tx.update(passengers).set({ departureId: null, seatNumber: null, returnDepartureId: null, returnSeatNumber: null })
+    await tx.update(passengers).set({ departureId: null, seatNumber: null, outboundPickupLocationId: null, outboundDropoffLocationId: null, returnDepartureId: null, returnSeatNumber: null, returnPickupLocationId: null, returnDropoffLocationId: null })
       .where(eq(passengers.bookingId, booking.id));
     await tx.update(tickets).set({ status: "voided" }).where(eq(tickets.bookingId, booking.id));
     await tx.update(bookings).set({ status: "canceled" }).where(eq(bookings.id, booking.id));

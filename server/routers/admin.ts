@@ -18,6 +18,7 @@ import {
   passengers,
   payments,
   routes,
+  routeStops,
   supportTickets,
   tickets,
   users,
@@ -139,6 +140,41 @@ export const adminRouter = router({
     return db.select({ id: bookings.id, bookingNumber: bookings.bookingNumber, status: bookings.status,
       contactFirstName: bookings.contactFirstName, contactLastName: bookings.contactLastName,
       createdAt: bookings.createdAt }).from(bookings).orderBy(desc(bookings.createdAt)).limit(5);
+  }),
+  support: router({
+    list: adminProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      return db.select({
+        id: supportTickets.id, userId: supportTickets.userId, subject: supportTickets.subject,
+        message: supportTickets.message, status: supportTickets.status, createdAt: supportTickets.createdAt,
+        customerName: users.name, customerEmail: users.email,
+      }).from(supportTickets).innerJoin(users, eq(users.id, supportTickets.userId))
+        .orderBy(desc(supportTickets.createdAt));
+    }),
+    get: adminProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const [ticket] = await db.select({
+        id: supportTickets.id, userId: supportTickets.userId, subject: supportTickets.subject,
+        message: supportTickets.message, status: supportTickets.status, createdAt: supportTickets.createdAt,
+        customerName: users.name, customerEmail: users.email, customerPhone: users.phone,
+      }).from(supportTickets).innerJoin(users, eq(users.id, supportTickets.userId))
+        .where(eq(supportTickets.id, input.id)).limit(1);
+      if (!ticket) throw new TRPCError({ code: "NOT_FOUND", message: "Support ticket not found." });
+      return ticket;
+    }),
+    updateStatus: adminProcedure.input(z.object({
+      id: z.number().int().positive(), status: z.enum(["open", "closed"]),
+    })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const [ticket] = await db.select({ id: supportTickets.id }).from(supportTickets).where(eq(supportTickets.id, input.id)).limit(1);
+      if (!ticket) throw new TRPCError({ code: "NOT_FOUND", message: "Support ticket not found." });
+      await db.update(supportTickets).set({ status: input.status }).where(eq(supportTickets.id, input.id));
+      await writeAudit(ctx.user.id, `support.${input.status}`, "supportTicket", input.id);
+      return { ok: true } as const;
+    }),
   }),
   supportTickets: adminProcedure.query(() => adminSupportTickets()),
   resolveSupport: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
@@ -539,6 +575,48 @@ export const adminRouter = router({
     if (!db) return [];
     return db.select().from(routes);
   }),
+  routeStops: adminProcedure
+    .input(z.object({ routeId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db.select().from(routeStops).where(eq(routeStops.routeId, input.routeId));
+      const allLocations = await db.select().from(locations);
+      const locationMap = new Map(allLocations.map(location => [location.id, location]));
+      return rows.sort((a, b) => a.stopOrder - b.stopOrder).map(stop => ({ ...stop, location: locationMap.get(stop.locationId) ?? null }));
+    }),
+  saveRouteStop: adminProcedure
+    .input(z.object({
+      id: z.number().int().positive().optional(), routeId: z.number().int().positive(),
+      locationId: z.number().int().positive(), stopOrder: z.number().int().min(1).max(20),
+      pickupAllowed: z.boolean(), dropoffAllowed: z.boolean(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const [route] = await db.select({ id: routes.id }).from(routes).where(eq(routes.id, input.routeId)).limit(1);
+      const [location] = await db.select({ id: locations.id }).from(locations).where(eq(locations.id, input.locationId)).limit(1);
+      if (!route || !location) throw new TRPCError({ code: "BAD_REQUEST", message: "Choose an existing route and location." });
+      const values = { routeId: input.routeId, locationId: input.locationId, stopOrder: input.stopOrder, pickupAllowed: input.pickupAllowed, dropoffAllowed: input.dropoffAllowed };
+      try {
+        if (input.id) await db.update(routeStops).set(values).where(eq(routeStops.id, input.id));
+        else await db.insert(routeStops).values(values);
+      } catch (error) {
+        if (String(error).toLowerCase().includes("duplicate")) throw new TRPCError({ code: "CONFLICT", message: "That stop order is already used on this route." });
+        throw error;
+      }
+      await writeAudit(ctx.user.id, input.id ? "route.stop.update" : "route.stop.create", "routeStop", input.id ?? input.routeId, values);
+      return { ok: true };
+    }),
+  deleteRouteStop: adminProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      await db.delete(routeStops).where(eq(routeStops.id, input.id));
+      await writeAudit(ctx.user.id, "route.stop.delete", "routeStop", input.id);
+      return { ok: true };
+    }),
   saveRoute: adminProcedure
     .input(
       z.object({

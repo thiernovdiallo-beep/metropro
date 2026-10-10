@@ -1,14 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
-import { memberCredentials, memberIdPhotos, users } from "../../drizzle/schema";
+import { memberCredentials, memberIdPhotos, passwordResetTokens, users } from "../../drizzle/schema";
 import { COOKIE_NAME, FIRST_PARTY_HEADER } from "@shared/const";
 import { getDb } from "../db";
 import { insertId } from "../lib/mysql";
 import { assertMemberAuthOrigin } from "../services/checkout-origin";
 import {
   delayUnknownMemberPassword,
+  assertStrongPassword,
   hashMemberPassword,
   normalizeMemberEmail,
   verifyMemberPassword,
@@ -17,6 +18,9 @@ import { encryptMemberIdImage } from "../services/member-profile";
 import { getSessionCookieOptions } from "../_core/cookies";
 import { publicProcedure, router } from "../_core/trpc";
 import { sdk } from "../_core/sdk";
+import { createPasswordResetToken, PASSWORD_RESET_MS, passwordResetTokenHash, throttlePasswordReset } from "../services/password-reset";
+import { TEMPLATES, notify } from "../services/notifications";
+import { withAdminHashSlot } from "../services/admin-throttle";
 
 const LOCAL_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 const LOCK_MS = 15 * 60 * 1000;
@@ -24,6 +28,8 @@ const INVALID_LOGIN = "Could not sign in. Check your credentials or try again la
 
 const emailSchema = z.string().trim().email().max(320);
 const passwordSchema = z.string().min(12).max(128);
+const RESET_SUCCESS = "If an account exists for that email, we sent password reset instructions.";
+const INVALID_RESET = "This password reset link is invalid, expired, or has already been used.";
 
 async function issueMemberSession(ctx: { req: Parameters<typeof getSessionCookieOptions>[0]; res: { cookie: (name: string, value: string, options: ReturnType<typeof getSessionCookieOptions> & { maxAge: number }) => unknown } }, openId: string, name: string, memberSessionVersion: number) {
   const sessionToken = await sdk.createSessionToken(openId, { name, expiresInMs: LOCAL_SESSION_MS, memberSessionVersion });
@@ -37,6 +43,71 @@ async function issueMemberSession(ctx: { req: Parameters<typeof getSessionCookie
 }
 
 export const memberAuthRouter = router({
+  requestReset: publicProcedure
+    .input(z.object({ email: emailSchema }))
+    .mutation(async ({ ctx, input }) => {
+      const origin = assertMemberAuthOrigin(ctx.req.headers.origin, ctx.req.headers["sec-fetch-site"], ctx.req.get(FIRST_PARTY_HEADER));
+      const email = normalizeMemberEmail(input.email);
+      const source = ctx.req.ip ?? ctx.req.socket?.remoteAddress ?? "unknown";
+      throttlePasswordReset(`source:${source}`);
+      throttlePasswordReset(`email:${email}`);
+      const db = await getDb();
+      if (!db) return { success: true, message: RESET_SUCCESS } as const;
+      const [user] = await db.select({ id: users.id, email: users.email, role: users.role })
+        .from(users).where(sql`LOWER(${users.email}) = ${email}`).limit(1);
+      if (!user || user.role !== "customer" || !user.email) return { success: true, message: RESET_SUCCESS } as const;
+      const [credential] = await db.select({ id: memberCredentials.id }).from(memberCredentials)
+        .where(eq(memberCredentials.userId, user.id)).limit(1);
+      if (!credential) return { success: true, message: RESET_SUCCESS } as const;
+      const { token, hash } = createPasswordResetToken();
+      await db.insert(passwordResetTokens).values({ userId: user.id, tokenHash: hash, expiresAt: new Date(Date.now() + PASSWORD_RESET_MS) });
+      const resetLink = `${origin}/reset-password#token=${encodeURIComponent(token)}`;
+      // Placeholder delivery: notify() currently creates an in-app notification only.
+      // Replace this with a real email provider before production launch.
+      try {
+        await notify({ userId: user.id, templateKey: TEMPLATES.password_reset_requested,
+          title: "Reset your Metro Pro password", body: `Use this one-time link within 24 hours: ${resetLink}`,
+          payload: { resetLink, expiresAt: new Date(Date.now() + PASSWORD_RESET_MS).toISOString() } });
+      } catch (error) {
+        // Do not turn delivery/storage differences into account enumeration.
+        console.warn("[password-reset] placeholder notification unavailable", error instanceof Error ? error.name : "unknown");
+      }
+      return { success: true, message: RESET_SUCCESS } as const;
+    }),
+  verifyToken: publicProcedure
+    .input(z.object({ token: z.string().min(1).max(128) }))
+    .query(async ({ input }) => {
+      const hash = passwordResetTokenHash(input.token);
+      if (!hash) return { valid: false } as const;
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const [candidate] = await db.select({ id: passwordResetTokens.id }).from(passwordResetTokens)
+        .where(and(eq(passwordResetTokens.tokenHash, hash), isNull(passwordResetTokens.consumedAt), gt(passwordResetTokens.expiresAt, new Date()))).limit(1);
+      return { valid: Boolean(candidate) } as const;
+    }),
+  resetPassword: publicProcedure
+    .input(z.object({ token: z.string().min(1).max(128), newPassword: passwordSchema }))
+    .mutation(async ({ ctx, input }) => {
+      assertMemberAuthOrigin(ctx.req.headers.origin, ctx.req.headers["sec-fetch-site"], ctx.req.get(FIRST_PARTY_HEADER));
+      const hash = passwordResetTokenHash(input.token);
+      if (!hash) throw new TRPCError({ code: "BAD_REQUEST", message: INVALID_RESET });
+      try { assertStrongPassword(input.newPassword); } catch (error) { throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Choose a stronger password." }); }
+      const passwordHash = await withAdminHashSlot(() => hashMemberPassword(input.newPassword));
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      await db.transaction(async tx => {
+        const [token] = await tx.select().from(passwordResetTokens).where(eq(passwordResetTokens.tokenHash, hash)).limit(1).for("update");
+        if (!token || token.consumedAt || token.expiresAt <= new Date()) throw new TRPCError({ code: "BAD_REQUEST", message: INVALID_RESET });
+        const [user] = await tx.select().from(users).where(eq(users.id, token.userId)).limit(1).for("update");
+        const [credential] = await tx.select().from(memberCredentials).where(eq(memberCredentials.userId, token.userId)).limit(1).for("update");
+        if (!user || user.role !== "customer" || !credential || !user.email || credential.emailNormalized !== normalizeMemberEmail(user.email)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: INVALID_RESET });
+        }
+        await tx.update(memberCredentials).set({ passwordHash, sessionVersion: sql`${memberCredentials.sessionVersion} + 1`, failedAttempts: 0, lockedUntil: null }).where(eq(memberCredentials.id, credential.id));
+        await tx.update(passwordResetTokens).set({ consumedAt: new Date() }).where(eq(passwordResetTokens.id, token.id));
+      });
+      return { success: true } as const;
+    }),
   register: publicProcedure
     .input(z.object({
       name: z.string().trim().min(3).max(160).refine(value => value.split(/\s+/).length >= 2, "Enter your first and last name"),

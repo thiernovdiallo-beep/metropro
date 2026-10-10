@@ -1,4 +1,4 @@
-import { PageShell } from "@/components/Brand";
+import { CustomerLayout } from "@/layouts/CustomerLayout";
 import { ActionLink, BookingProgress, PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { formatDateLong, formatTime, moneyExact } from "@/lib/format";
@@ -27,7 +27,7 @@ export default function Confirmation() {
   const title = linkUnavailable ? "Booking link unavailable" : confirmed ? "Booking confirmed" : unavailable ? "Booking not confirmed" : "Confirming your payment";
   const description = linkUnavailable ? "Use your private booking link or sign in to your member account to find your trip." : confirmed ? "Your Metro Pro booking has been confirmed. Your digital tickets are ready below." : unavailable ? query.data?.refund?.status === "pending" ? "This trip was canceled. Stripe has accepted a refund request, but your money has not yet been confirmed returned." : query.data?.refund?.status === "failed" ? "This trip was canceled and its Stripe refund failed. Please contact support for urgent manual review." : query.data?.refund?.status === "succeeded" ? "This trip was canceled and Stripe confirmed the refund." : "This booking was canceled or its temporary hold expired. If you paid, contact support for a payment review." : "Stripe is confirming your payment. This page updates automatically — returning from Checkout alone is not proof that payment succeeded.";
 
-  return <PageShell><main className="metro-page metro-page--readable">
+  return <CustomerLayout><main className="metro-page metro-page--readable">
     <BookingProgress current="Ticket" />
     <PageIntro eyebrow="Metro Pro · Booking status" title={title} description={description} />
     {query.isLoading ? <div className="mb-6"><ResourceState loading>Loading the latest booking status…</ResourceState></div> : null}
@@ -59,5 +59,5 @@ export default function Confirmation() {
       <Button variant="outline" className="mt-3 min-h-11 w-full" onClick={async () => { try { const link = new URL(window.location.href); link.searchParams.delete("session_id"); await navigator.clipboard.writeText(link.toString()); toast.success("Private link copied"); } catch { toast.error("Copy the page URL from your address bar"); } }}>Copy private booking link</Button>
     </StatusNotice> : null}
     <div className="mt-8 flex flex-wrap gap-3"><ActionLink href="/" back>Back to home</ActionLink>{unavailable ? <ActionLink href="/#trip-search" variant="primary">Find another trip</ActionLink> : null}</div>
-  </main></PageShell>;
+  </main></CustomerLayout>;
 }

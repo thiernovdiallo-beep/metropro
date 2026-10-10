@@ -1,4 +1,4 @@
-import { PageShell } from "@/components/Brand";
+import { CustomerLayout } from "@/layouts/CustomerLayout";
 import { PageIntro, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,7 +52,7 @@ export default function CreateAccount() {
   }
 
   return (
-    <PageShell>
+    <CustomerLayout>
       <section className="bg-gradient-to-br from-background via-white to-secondary">
         <div className="metro-page metro-page--wide grid min-w-0 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.88fr)] lg:items-start lg:gap-12">
           <div className="min-w-0 lg:pt-6">
@@ -109,6 +109,6 @@ export default function CreateAccount() {
           </form>
         </div>
       </section>
-    </PageShell>
+    </CustomerLayout>
   );
 }

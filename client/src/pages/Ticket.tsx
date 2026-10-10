@@ -1,4 +1,5 @@
-import { PageShell, Wordmark } from "@/components/Brand";
+import { Wordmark } from "@/components/Brand";
+import { CustomerLayout } from "@/layouts/CustomerLayout";
 import { ActionLink, PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import { formatDateLong, formatTime, moneyExact } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
@@ -22,19 +23,19 @@ export default function Ticket() {
   }, [printRequested, canPrint]);
   if (!data?.ticket || !data.booking || !data.passenger || !data.trip) {
     return (
-      <PageShell>
+      <CustomerLayout>
         <main className="metro-page metro-page--readable">
           <PageIntro eyebrow="Metro Pro" title="Digital ticket" description="Keep your private ticket link available for boarding." />
           <ResourceState loading={query.isLoading} error={token && !query.isLoading ? "This ticket is unavailable. Use the private booking link or sign in to the account that owns it." : null} empty={!token} emptyTitle="Ticket link missing" emptyDescription="Use the digital-ticket link from your confirmed booking."><></></ResourceState>
           {!token ? <ActionLink href="/" back className="mt-5">Back to home</ActionLink> : null}
         </main>
-      </PageShell>
+      </CustomerLayout>
     );
   }
   const { ticket, booking, passenger, trip } = data;
   const boardable = booking.status === "confirmed" && ticket.status !== "voided";
   return (
-    <PageShell>
+    <CustomerLayout>
       <main className="metro-page metro-page--readable">
         <PageIntro eyebrow="Metro Pro" title="Digital ticket" description="Present this ticket and QR code when boarding." />
         <div className="mx-auto max-w-md">
@@ -54,9 +55,9 @@ export default function Ticket() {
                 <div className="font-serif text-2xl">{formatTime(trip.departAt)} → {formatTime(trip.arriveAt)}</div>
               </div>
               <div className="text-sm leading-relaxed text-muted-foreground">
-                Pickup {trip.pickup?.label}
+                Pickup {data.selectedPickup?.label ?? trip.pickup?.label}
                 <br />
-                Drop-off {trip.dropoff?.label}
+                Drop-off {data.selectedDropoff?.label ?? trip.dropoff?.label}
               </div>
               <div className="grid gap-1 border-y border-border py-3 text-sm"><span>Passengers on booking: {booking.passengerCount}</span><span>Booking total paid: {moneyExact(booking.amountCents)}</span><strong className="text-primary">{data.seatNumber ? `Seat ${data.seatNumber}` : `Seat: ${ticket.seatType === "front" ? "Front passenger seat" : "Regular passenger seat"}`}</strong></div>
               {boardable ? <>
@@ -71,6 +72,6 @@ export default function Ticket() {
           {boardable ? <button type="button" className="ticket-print-actions mt-5 min-h-11 w-full rounded-xl border border-input bg-white px-4 py-2 text-sm font-semibold text-primary hover:bg-secondary" onClick={() => window.print()}>Print ticket / save as PDF</button> : null}
         </div>
       </main>
-    </PageShell>
+    </CustomerLayout>
   );
 }

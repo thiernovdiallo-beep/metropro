@@ -1,9 +1,8 @@
-import { PageShell } from "@/components/Brand";
+import { AdminLayout } from "@/layouts/AdminLayout";
 import { PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import { formatDate, formatTime, money } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { Link } from "wouter";
-import { AdminNav } from "./AdminPages";
 
 function Kpi({ label, value }: { label: string; value: string }) {
   return <div className="ticket-card p-4 sm:p-5">
@@ -22,9 +21,8 @@ export default function AdminHome() {
   const k = kpis.data;
   const queryError = (error: { message?: string } | null) => error ? "Operations could not be loaded. Refresh or try again later." : null;
 
-  return <PageShell><div className="metro-page metro-page--wide">
+  return <AdminLayout><div className="metro-page metro-page--wide">
     <PageIntro eyebrow="Operations" title="Today" description="A live view of service, passenger demand, and items needing staff attention." />
-    <AdminNav />
 
     <ResourceState loading={kpis.isLoading} error={queryError(kpis.error)} empty={!k} emptyTitle="No live operations summary" emptyDescription="Live metrics will appear here when operations data is available." onRetry={() => void kpis.refetch()}>
       {k ? <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -48,7 +46,7 @@ export default function AdminHome() {
       </div> : null}
     </ResourceState>
 
-    <section className="mt-10" aria-labelledby="today-trips-title">
+    <section id="today-trips" className="mt-10" aria-labelledby="today-trips-title">
       <h2 id="today-trips-title" className="metro-section-title">Trips scheduled today</h2>
       <div className="mt-3">
         <ResourceState loading={trips.isLoading} error={queryError(trips.error)} empty={!trips.data?.length} emptyTitle="No trips scheduled today" emptyDescription="Scheduled departures for today will be shown here." onRetry={() => void trips.refetch()}>
@@ -77,5 +75,5 @@ export default function AdminHome() {
         {!messages.isLoading && !support.isLoading && !(k?.failedRefunds || k?.pendingRefunds || messages.data?.length || support.data?.some(item => item.status === "open") || trips.data?.some(t => t && t.seatsRemaining <= 2)) ? <div className="ticket-card p-5 text-sm text-muted-foreground">No current operational alerts.</div> : null}
       </div></section>
     </div>
-  </div></PageShell>;
+  </div></AdminLayout>;
 }

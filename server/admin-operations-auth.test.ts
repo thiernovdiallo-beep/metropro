@@ -14,6 +14,7 @@ describe("private admin operations access", () => {
       const staff = caller(role);
       const calls = [() => staff.bookings({}), () => staff.booking({ id: 1 }), () => staff.payments(),
         () => staff.supportTickets(), () => staff.recentBookings(), () => staff.upcomingDepartures(), () => staff.schedule(),
+        () => staff.support.list(), () => staff.support.get({ id: 1 }), () => staff.support.updateStatus({ id: 1, status: "closed" }),
         () => staff.rescheduleBooking({ bookingId: 1, newOutboundDepartureId: 2, newReturnDepartureId: null,
           outboundSeats: ["2A"], returnSeats: null })];
       for (const call of calls) await expect(call()).rejects.toMatchObject({ code: "FORBIDDEN" });

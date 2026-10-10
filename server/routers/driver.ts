@@ -10,6 +10,7 @@ import {
   driverPrivateProfiles,
   driverProfiles,
   locations,
+  routeStops,
   passengers,
   routes,
   tickets,
@@ -64,13 +65,17 @@ async function tripBundle(dep: typeof departures.$inferSelect) {
     .from(locations)
     .where(eq(locations.id, route.dropoffLocationId))
     .limit(1);
+  const stopRows = await db.select().from(routeStops).where(eq(routeStops.routeId, route.id));
+  const allLocations = await db.select().from(locations);
+  const locationMap = new Map(allLocations.map(location => [location.id, location]));
   const [vehicle] = dep.vehicleId
     ? await db.select().from(vehicles).where(eq(vehicles.id, dep.vehicleId)).limit(1)
     : [null];
   const [driver] = dep.driverId
     ? await db.select().from(driverProfiles).where(eq(driverProfiles.id, dep.driverId)).limit(1)
     : [null];
-  return { departure: dep, route, origin, destination, pickup, dropoff, vehicle,
+  return { departure: dep, route, origin, destination, pickup, dropoff,
+    stops: stopRows.sort((a, b) => a.stopOrder - b.stopOrder).map(stop => ({ ...stop, location: locationMap.get(stop.locationId) ?? null })), vehicle,
     driver: driver ? { id: driver.id, fullName: driver.fullName, phone: driver.phone, status: driver.status } : null };
 }
 
@@ -119,12 +124,16 @@ export const driverRouter = router({
       const { db, dep } = await requireAssignedDeparture(ctx.user, input.departureId);
       const bundle = await tripBundle(dep);
       const tix = await db.select().from(tickets).where(eq(tickets.departureId, dep.id));
+      const allLocations = await db.select().from(locations);
+      const locationMap = new Map(allLocations.map(location => [location.id, location]));
       const manifest = [];
       for (const t of tix) {
         if (t.status === "voided") continue;
         const [p] = await db.select().from(passengers).where(eq(passengers.id, t.passengerId)).limit(1);
         const [b] = await db.select().from(bookings).where(eq(bookings.id, t.bookingId)).limit(1);
         if (!p || !b || b.status !== "confirmed") continue;
+        const pickupLocationId = p.departureId === dep.id ? p.outboundPickupLocationId : p.returnPickupLocationId;
+        const dropoffLocationId = p.departureId === dep.id ? p.outboundDropoffLocationId : p.returnDropoffLocationId;
         manifest.push({
           id: p.id,
           firstName: p.firstName,
@@ -137,6 +146,8 @@ export const driverRouter = router({
           ticketId: t.id,
           seatType: t.seatType,
           seatNumber: seatNumberForTicket(t, p),
+          pickupLocation: pickupLocationId ? locationMap.get(pickupLocationId)?.label ?? null : null,
+          dropoffLocation: dropoffLocationId ? locationMap.get(dropoffLocationId)?.label ?? null : null,
         });
       }
       return { ...bundle, manifest };

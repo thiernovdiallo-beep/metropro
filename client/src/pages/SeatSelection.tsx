@@ -1,4 +1,4 @@
-import { PageShell } from "@/components/Brand";
+import { CustomerLayout } from "@/layouts/CustomerLayout";
 import { ActionLink, BookingProgress, PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import SeatMap from "@/components/SeatMap";
 import { Button } from "@/components/ui/button";
@@ -65,7 +65,7 @@ export default function SeatSelection() {
     setLocation(`/book?${params}`);
   }
 
-  return <PageShell><main className="metro-page metro-page--wide pb-28 lg:pb-20">
+  return <CustomerLayout><main className="metro-page metro-page--wide pb-28 lg:pb-20">
     <BookingProgress current="Seats" />
     <PageIntro eyebrow="Your trip · Step 3" title="Select your seat" description="Seats are selected for passenger 1, passenger 2, and so on. No seat is held until secure checkout creates your booking." />
     {outbound.data ? <div className="mb-5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><span>{outbound.data.origin?.name} → {outbound.data.destination?.name} · {formatDate(outbound.data.departAt)} · {formatTime(outbound.data.departAt)} · {outbound.data.vehicleCode ? `Service ${outbound.data.vehicleCode}` : "Vehicle assignment pending"}</span><StatusBadge status="pending" label="Choose seats" /></div> : null}
@@ -86,5 +86,5 @@ export default function SeatSelection() {
       </aside>
     </div>
     <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(0,0,0,.08)] backdrop-blur lg:hidden"><div className="mx-auto flex max-w-[1200px] items-center justify-between gap-3"><div className="min-w-0 text-sm"><strong>{outSeats.filter(Boolean).length}/{pax} outbound seats</strong>{ret ? <p className="text-xs text-muted-foreground">{retSeats.filter(Boolean).length}/{pax} return · Estimate {money(estimate)}</p> : <p className="text-xs text-muted-foreground">Estimate {money(estimate)}</p>}</div><Button className="min-h-11 shrink-0" disabled={!ready} onClick={continueToPassengers}>Continue</Button></div></div>
-  </main></PageShell>;
+  </main></CustomerLayout>;
 }

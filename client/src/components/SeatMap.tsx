@@ -39,10 +39,10 @@ const legend: { label: string; status: SeatStatus }[] = [
 // "business" category is not offered by Metro Pro, so the live legend stays truthful.
 const diagramLegend = [
   { label: "Front", swatch: "bg-amber-500" },
-  { label: "Regular", swatch: "bg-primary" },
+  { label: "Regular", swatch: "bg-[var(--metro-green)]" },
   { label: "Booked", swatch: "bg-gray-400" },
-  { label: "Held", swatch: "bg-yellow-400" },
-  { label: "Selected", swatch: "bg-blue-700 ring-2 ring-blue-200" },
+  { label: "Held", swatch: "bg-[var(--metro-warning)]" },
+  { label: "Selected", swatch: "bg-[var(--metro-green)] ring-2 ring-green-200" },
 ];
 
 function ChairGlyph() {

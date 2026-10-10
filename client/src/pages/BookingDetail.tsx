@@ -1,4 +1,4 @@
-import { PageShell } from "@/components/Brand";
+import { CustomerLayout } from "@/layouts/CustomerLayout";
 import { ActionLink, PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { formatDateLong, formatTime, moneyExact } from "@/lib/format";
@@ -17,7 +17,7 @@ export default function BookingDetail() {
   }, onError: error => toast.error(error.message) });
   const item = q.data;
   const b = item?.booking;
-  return <PageShell><div className="metro-page metro-page--readable">
+  return <CustomerLayout><div className="metro-page metro-page--readable">
     <PageIntro eyebrow="My bookings" title="Booking details" description="Review your reservation, seats and available booking actions." actions={<ActionLink href="/account" back>Back to my bookings</ActionLink>} />
     <ResourceState loading={q.isLoading} error={q.error || !id ? "This booking is unavailable to your account. Sign in with the booking's owner account, or use your original private guest confirmation link." : null} empty={!q.isLoading && !q.error && Boolean(id) && !b} emptyTitle="Booking unavailable" emptyDescription="This booking no longer has details available to display.">
       {b ? <>
@@ -51,9 +51,9 @@ export default function BookingDetail() {
             if (window.confirm(`Cancel booking ${b.bookingNumber}? All tickets on this booking will be voided and any eligible payment refunded through Stripe.`)) cancel.mutate({ bookingId: b.id });
           }}>{cancel.isPending ? "Canceling…" : "Cancel booking"}</Button> : null}
           {b.status === "confirmed" && !item?.canCancel ? <StatusNotice tone="pending" className="self-center">The self-service cancellation window has closed. Contact support for changes.</StatusNotice> : null}
-          <ActionLink href="/account/support">Contact support</ActionLink>
+          <ActionLink href="/support">Contact support</ActionLink>
         </div>
       </> : null}
     </ResourceState>
-  </div></PageShell>;
+  </div></CustomerLayout>;
 }

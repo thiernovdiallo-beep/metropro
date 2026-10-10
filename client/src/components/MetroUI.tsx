@@ -33,7 +33,7 @@ export function statusTone(status: string): "success" | "pending" | "error" | "n
 
 export function StatusBadge({ status, label, className }: { status: string; label?: string; className?: string }) {
   const text = label ?? status.replace(/_/g, " ").replace(/\b\w/g, letter => letter.toUpperCase());
-  return <span className={cn("metro-status", `metro-status--${statusTone(status)}`, className)}>{text}</span>;
+  return <span data-status={status.toLowerCase()} className={cn("metro-status", `metro-status--${statusTone(status)}`, className)}>{text}</span>;
 }
 
 export function StatusNotice({ tone = "info", children, className }: {
@@ -48,7 +48,7 @@ export function ResourceState({ loading, error, empty, emptyTitle = "Nothing her
   emptyDescription?: string; onRetry?: () => void; children: ReactNode;
 }) {
   if (loading) return <div role="status" className="ticket-card flex min-h-28 items-center gap-3 p-5 text-sm text-muted-foreground">
-    <LoaderCircle className="h-5 w-5 animate-spin text-primary" aria-hidden="true" />Loading Metro Pro…
+    <LoaderCircle className="metro-spinner h-5 w-5" aria-hidden="true" />Loading Metro Pro…
   </div>;
   if (error) return <div role="alert" className="metro-notice metro-notice--error flex min-w-0 flex-wrap items-center gap-3">
     <AlertCircle className="h-5 w-5 shrink-0" aria-hidden="true" />
@@ -79,7 +79,7 @@ export function BookingProgress({ current }: { current: BookingStep }) {
     <ol className="flex min-w-max items-center gap-2 text-xs font-semibold sm:gap-3">
       {bookingSteps.map((step, index) => <li key={step} aria-current={index === currentIndex ? "step" : undefined}
         className={cn("flex items-center gap-2 rounded-full border px-3 py-2.5", index < currentIndex ? "border-primary/30 bg-secondary text-primary"
-          : index === currentIndex ? "border-primary bg-primary text-white" : "border-border bg-white text-muted-foreground")}>
+          : index === currentIndex ? "border-[var(--metro-green)] bg-[var(--metro-green)] text-white" : "border-border bg-white text-muted-foreground")}>
         <span aria-hidden="true">{index + 1}</span>{step}
       </li>)}
     </ol>

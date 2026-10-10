@@ -1,4 +1,5 @@
-import { PageShell } from "@/components/Brand";
+import { CustomerLayout } from "@/layouts/CustomerLayout";
+import { AdminLayout } from "@/layouts/AdminLayout";
 import { ActionLink, PageIntro, ResourceState, StatusNotice } from "@/components/MetroUI";
 import SeatMap from "@/components/SeatMap";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,6 @@ import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useLocation, useRoute } from "wouter";
-import { AdminNav } from "./AdminPages";
 
 type Route = { id: number; originCityId: number; destinationCityId: number };
 
@@ -20,6 +20,7 @@ export default function RescheduleBooking({ admin = false }: { admin?: boolean }
   const owner = trpc.account.booking.useQuery({ id }, { enabled: validId && !admin, retry: false });
   const staff = trpc.admin.booking.useQuery({ id }, { enabled: validId && admin, retry: false });
   const routes = trpc.admin.routes.useQuery(undefined, { enabled: admin });
+  const settings = trpc.public.settings.useQuery();
   const booking = admin ? staff.data : owner.data?.booking;
   const originalOut = admin ? staff.data?.outbound : owner.data?.outbound;
   const originalRet = admin ? staff.data?.returnTrip : owner.data?.returnTrip;
@@ -43,7 +44,9 @@ export default function RescheduleBooking({ admin = false }: { admin?: boolean }
   const retOptions = (retTrips.data ?? []).filter(trip => trip.routeId === routeRet?.id && trip.id !== originalRet?.id && !trip.soldOut &&
     (!selectedOut || trip.departAt > selectedOut.arriveAt));
   const selectedRet = retOptions.find(trip => trip.id === newRetId);
-  const canChange = Boolean(booking && booking.status === "confirmed" && !booking.usedFreeReschedule && booking.userId && originalOut);
+  const cutoffHours = settings.data?.cancelCutoffHours ?? 24;
+  const withinCutoff = Boolean(originalOut && originalOut.departAt.getTime() - Date.now() >= cutoffHours * 60 * 60 * 1000);
+  const canChange = Boolean(booking && booking.status === "confirmed" && !booking.usedFreeReschedule && booking.userId && originalOut && withinCutoff);
   const ready = Boolean(canChange && selectedOut && (!originalRet || selectedRet) && outSeats.length === passengerCount && outSeats.every(Boolean) &&
     (!originalRet || retSeats.length === passengerCount && retSeats.every(Boolean)));
   const utils = trpc.useUtils();
@@ -55,6 +58,7 @@ export default function RescheduleBooking({ admin = false }: { admin?: boolean }
   }, onError: error => toast.error(error.message) });
   const pending = ownerChange.isPending || staffChange.isPending;
   const detailUrl = admin ? `/admin/bookings/${id}` : `/account/booking/${id}`;
+  const Shell = admin ? AdminLayout : CustomerLayout;
   const assign = (seats: (string | null)[], update: (value: (string | null)[]) => void, seat: string, index: number) => {
     const next = Array.from({ length: passengerCount }, (_, i) => seats[i] ?? null);
     next[index] = seat; update(next);
@@ -71,11 +75,11 @@ export default function RescheduleBooking({ admin = false }: { admin?: boolean }
     if (admin) staffChange.mutate(input);
     else ownerChange.mutate(input);
   }
-  return <PageShell><div className="metro-page metro-page--wide">
-    {admin ? <div className="ticket-card mb-6 p-3"><AdminNav /></div> : null}
-    <PageIntro eyebrow={admin ? "Operations booking" : "My booking"} title="Choose new departures and seats" description="Eligible active members have one complimentary reschedule before the policy cutoff. Choose the same route and seat types, with a real available seat for every traveler. Your original tickets become invalid only after the replacement commits. All times are Eastern." actions={<ActionLink href={detailUrl} back>Back to booking</ActionLink>} />
-    <ResourceState loading={owner.isLoading || staff.isLoading || admin && routes.isLoading} error={owner.error || staff.error ? "Booking not found or access denied." : null} empty={Boolean(booking && !canChange)} emptyTitle="Reschedule unavailable" emptyDescription="This booking is not eligible for another complimentary self-serve reschedule. Please contact support to discuss other options.">
+  return <Shell><div className="metro-page metro-page--wide">
+    <PageIntro eyebrow={admin ? "Operations booking" : "My booking"} title="Choose new departures and seats" description="Eligible active members have one complimentary MetroPro reschedule before the policy cutoff. Choose the same route and seat types, with a real available seat for every traveler. Your original tickets become invalid only after the replacement commits. All times are Eastern." actions={<ActionLink href={detailUrl} back>Back to booking</ActionLink>} />
+    <ResourceState loading={owner.isLoading || staff.isLoading || admin && routes.isLoading || settings.isLoading} error={owner.error || staff.error ? "Booking not found or access denied." : null} empty={Boolean(booking && !canChange)} emptyTitle="Reschedule unavailable" emptyDescription={!withinCutoff && originalOut ? `Self-service rescheduling closes ${cutoffHours} hours before departure. Please contact support for assistance.` : "This booking is not eligible for another complimentary self-serve reschedule. Please contact support to discuss other options."}>
       {canChange && routeOut ? <div className="space-y-6">
+        {!admin && originalOut ? <section className="ticket-card p-5 sm:p-6"><h2 className="font-serif text-xl">Current booking</h2><div className="mt-3 grid gap-2 text-sm sm:grid-cols-2"><p><span className="text-muted-foreground">Route:</span> {owner.data?.outbound?.origin?.name} → {owner.data?.outbound?.destination?.name}</p><p><span className="text-muted-foreground">Departure:</span> {formatDateLong(originalOut.departAt)} · {formatTime(originalOut.departAt)}</p><p className="sm:col-span-2"><span className="text-muted-foreground">Seats:</span> {owner.data?.passengers.map(passenger => `${passenger.firstName} ${passenger.lastName} · ${passenger.seatNumber ? `Seat ${passenger.seatNumber}` : "Assigned seat"}`).join(" · ")}</p></div><StatusNotice className="mt-4">Reschedule fee: $0 for this complimentary member benefit. Changes must be made at least {cutoffHours} hours before departure.</StatusNotice></section> : null}
         <section className="ticket-card p-5 sm:p-6"><h2 className="font-serif text-xl">Outbound · {passengerCount} traveler{passengerCount === 1 ? "" : "s"}</h2>
           <label className="metro-form-label mt-5 grid max-w-xs gap-2">New departure date (Eastern)<Input className="metro-control" type="date" min={isoDate()} value={outDate} onChange={event => { setOutDate(event.target.value); setNewOutId(null); setNewRetId(null); setOutSeats([]); setRetSeats([]); }} /></label>
           {outTrips.error ? <StatusNotice tone="error" className="mt-4">Departures could not be loaded. Try another date.</StatusNotice> : null}
@@ -98,5 +102,5 @@ export default function RescheduleBooking({ admin = false }: { admin?: boolean }
         <p className="text-xs leading-relaxed text-muted-foreground">If a seat becomes unavailable, no inventory or ticket change is saved. No new card payment is taken for this eligible member benefit.</p>
       </div> : null}
     </ResourceState>
-  </div></PageShell>;
+  </div></Shell>;
 }

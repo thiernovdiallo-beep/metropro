@@ -1,4 +1,4 @@
-import { PageShell } from "@/components/Brand";
+import { DriverAuthLayout } from "@/layouts/DriverLayout";
 import { ActionLink, PageIntro, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,7 +33,7 @@ export default function DriverSetup() {
       setError(cause instanceof Error ? cause.message : "Unable to set password.");
     }
   }
-  return <PageShell><section className="metro-page metro-page--readable flex min-h-[60vh] items-center">
+  return <DriverAuthLayout><section className="metro-page metro-page--readable flex min-h-[60vh] items-center">
     <div className="mx-auto w-full max-w-lg"><PageIntro eyebrow="Private staff setup" title="Set your driver password" description="The administrator creates your account first and shares this single-use link privately. The link expires in 24 hours." />
       <div className="ticket-card p-5 sm:p-7">
       {!token ? <StatusNotice tone="error">Open the complete private setup link from your administrator, or request a new one.</StatusNotice> : <form onSubmit={submit} className="grid gap-4">
@@ -46,5 +46,5 @@ export default function DriverSetup() {
       <ActionLink href="/driver/login" className="mt-5">Return to driver sign in</ActionLink>
       </div>
     </div>
-  </section></PageShell>;
+  </section></DriverAuthLayout>;
 }

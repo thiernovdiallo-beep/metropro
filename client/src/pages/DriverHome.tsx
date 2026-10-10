@@ -1,4 +1,4 @@
-import { PageShell } from "@/components/Brand";
+import { DriverLayout } from "@/layouts/DriverLayout";
 import { DriverPortrait } from "@/components/DriverPortrait";
 import { ActionLink, PageIntro, ResourceState, StatusBadge } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ export default function DriverHome() {
 
   if (!isAuthenticated) {
     return (
-      <PageShell>
+      <DriverLayout>
         <div className="metro-page metro-page--readable">
           <PageIntro
             eyebrow="Driver access"
@@ -30,7 +30,7 @@ export default function DriverHome() {
             </Button>
           </section>
         </div>
-      </PageShell>
+      </DriverLayout>
     );
   }
 
@@ -38,7 +38,7 @@ export default function DriverHome() {
   const upcoming = home.data?.upcoming ?? [];
 
   return (
-    <PageShell>
+    <DriverLayout>
       <div className="metro-page">
         <PageIntro
           eyebrow="Driver operations"
@@ -53,7 +53,7 @@ export default function DriverHome() {
         >
           <>
             {home.data?.profile ? (
-              <section className="ticket-card mb-8 flex flex-wrap items-center gap-4 p-5 sm:p-6" aria-label="Driver profile">
+              <section id="driver-profile" className="ticket-card mb-8 flex flex-wrap items-center gap-4 p-5 sm:p-6" aria-label="Driver profile">
                 <DriverPortrait profileId={home.data.profile.id} name={home.data.profile.fullName} className="h-20 w-20" />
                 <div className="min-w-0">
                   <p className="metro-eyebrow">Driver profile</p>
@@ -87,6 +87,7 @@ export default function DriverHome() {
                       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                         Departure {formatTime(today.departure.departAt)} · Vehicle {today.vehicle?.code} · Passengers {today.passengersBooked}/{today.capacity}
                       </p>
+                      {today.stops?.length ? <p className="mt-2 text-xs text-muted-foreground">Via {today.stops.map(stop => stop.location?.label ?? `Stop ${stop.stopOrder}`).join(" · ")}</p> : null}
                     </div>
                     <StatusBadge status={today.departure.status} className="shrink-0" />
                   </div>
@@ -107,7 +108,7 @@ export default function DriverHome() {
               )}
             </section>
 
-            <section className="mt-10" aria-labelledby="upcoming-assignments-heading">
+            <section id="upcoming-assignments-heading" className="mt-10" aria-labelledby="upcoming-assignments-heading">
               <div className="flex items-center gap-2">
                 <CalendarDays className="h-5 w-5 text-primary" aria-hidden="true" />
                 <h2 id="upcoming-assignments-heading" className="metro-section-title">Upcoming assignments</h2>
@@ -150,6 +151,6 @@ export default function DriverHome() {
           </>
         </ResourceState>
       </div>
-    </PageShell>
+    </DriverLayout>
   );
 }

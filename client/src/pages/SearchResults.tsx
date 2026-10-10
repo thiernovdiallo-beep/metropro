@@ -1,19 +1,36 @@
-import { PageShell } from "@/components/Brand";
+import { CustomerLayout } from "@/layouts/CustomerLayout";
 import { BookingProgress, PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDate, formatTime, isoDate, money } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { useEffect, useMemo, useState } from "react";
+import type { MapMarker } from "@/components/Map";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
+
+const LazyMapView = lazy(() => import("@/components/Map").then(module => ({ default: module.MapView })));
 
 type Departure = {
   id: number; departAt: Date; arriveAt: Date; seatsRemaining: number;
   standardSeatsRemaining: number; frontSeatAvailable: boolean; soldOut: boolean;
   standardFareCents: number; memberFareCents: number; frontFareCents: number;
   pickup?: { label: string } | null; dropoff?: { label: string } | null;
-  origin?: { name: string } | null; destination?: { name: string } | null;
+  origin?: { name: string; state?: string } | null; destination?: { name: string; state?: string } | null;
+  originCoordinates?: { lat: number; lng: number } | null;
+  destinationCoordinates?: { lat: number; lng: number } | null;
+  pickupCoordinates?: { lat: number; lng: number } | null;
+  dropoffCoordinates?: { lat: number; lng: number } | null;
+  stops?: Array<{
+    id?: number;
+    label?: string;
+    address?: string;
+    cityId?: number;
+    sequence: number;
+    pickupAllowed: boolean;
+    dropoffAllowed: boolean;
+    coordinates?: { lat: number; lng: number } | null;
+  }>;
   vehicleCode?: string | null; memberEarlyAccess: boolean;
 };
 
@@ -75,6 +92,21 @@ export default function SearchResults() {
   const selectedOutbound = outbound.data?.find(d => d.id === outId);
   const eligibleReturns = selectedOutbound ? inbound.data?.filter(d => d.departAt > selectedOutbound.arriveAt) : [];
   const selectedReturn = eligibleReturns?.find(d => d.id === inId);
+  const mapMarkers = useMemo<MapMarker[]>(() => {
+    const first = outbound.data?.[0];
+    if (!first) return [];
+    const stopMarkers = (first.stops ?? []).map(stop => stop.coordinates ? {
+      ...stop.coordinates,
+      label: stop.label ?? `Stop ${stop.sequence}`,
+      pickupDropoff: stop.pickupAllowed && stop.dropoffAllowed ? "Pickup and drop-off available" : "Scheduled stop",
+      type: "stop" as const,
+    } : null);
+    return ([
+      first.originCoordinates && { ...first.originCoordinates, label: first.origin?.name ?? "Origin", city: first.origin?.name, region: first.origin?.state, type: "origin" as const },
+      ...stopMarkers,
+      first.destinationCoordinates && { ...first.destinationCoordinates, label: first.destination?.name ?? "Destination", city: first.destination?.name, region: first.destination?.state, type: "destination" as const },
+    ] as (MapMarker | null)[]).filter((marker): marker is MapMarker => Boolean(marker));
+  }, [outbound.data]);
 
   function chooseTrip(out: number, ret: number | null) {
     const q = new URLSearchParams({ out: String(out), pax: String(pax), type, search: params.toString() });
@@ -82,7 +114,7 @@ export default function SearchResults() {
     setLocation(`/trip?${q}`);
   }
 
-  return <PageShell><main className="metro-page metro-page--wide">
+  return <CustomerLayout><main className="metro-page metro-page--wide">
     <BookingProgress current="Search" />
     <PageIntro eyebrow="Find your departure" title={`${cityName(origin)} → ${cityName(dest)}`}
       description={<>{date ? formatDate(date) : "Choose a date"} · {pax} passenger{pax === 1 ? "" : "s"}{type === "round_trip" && returnDate ? ` · Return ${formatDate(returnDate)}` : ""}</>}
@@ -107,6 +139,24 @@ export default function SearchResults() {
     </form> : null}
     {!valid ? <StatusNotice tone="error" className="mt-7">This search is incomplete. <Link href="/" className="font-semibold underline underline-offset-4">Start a new search</Link>.</StatusNotice> : null}
     {valid ? <>
+      {mapMarkers.length ? <section className="ticket-card mt-8 overflow-hidden p-3 sm:p-4" aria-label="Route map">
+        <div className="mb-3 px-2 sm:px-3"><h2 className="font-serif text-xl">Route map</h2><p className="mt-1 text-sm text-muted-foreground">Pickup and drop-off locations for this service.</p></div>
+        <Suspense fallback={<div className="flex h-[280px] items-center justify-center rounded-xl bg-secondary/60 text-sm text-muted-foreground sm:h-[360px]">Loading route map…</div>}>
+          <LazyMapView markers={mapMarkers} initialZoom={7} className="rounded-xl" />
+        </Suspense>
+        <div className="mt-4 flex flex-wrap items-center gap-2 px-2 sm:px-3" aria-label="Route sequence">
+          {mapMarkers.map((marker, index) => <span key={`${marker.type}-${marker.label}`} className="inline-flex items-center gap-2 rounded-full border border-[#DDE4E0] bg-white px-3 py-1.5 text-xs font-semibold text-[#2D3E40]">
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#16A34A] text-[10px] font-bold text-white">{marker.type === "origin" ? "A" : marker.type === "destination" ? "D" : index}</span>
+            {marker.label}
+          </span>)}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 px-2 text-xs text-muted-foreground sm:px-3" aria-label="Route map legend">
+          <span><strong className="text-[#2D3E40]">A</strong> Origin</span>
+          <span><strong className="text-[#16A34A]">1, 2…</strong> Stops</span>
+          <span><strong className="text-[#2D3E40]">D</strong> Destination</span>
+          <span><strong className="text-[#111827]">━</strong> Route</span>
+        </div>
+      </section> : null}
       <ResultLeg label="Outbound" date={date} data={outbound.data} loading={outbound.isLoading} error={outbound.error?.message} retry={() => void outbound.refetch()} selectedId={outId} pax={pax} onSelect={id => { setOutId(id); setInId(null); if (type === "one_way") chooseTrip(id, null); }} direct={type === "one_way"} onModify={() => setEditing(true)} />
       {type === "round_trip" && !selectedOutbound ? <StatusNotice tone="info" className="mt-6">Choose an outbound departure first to see valid returns after its arrival.</StatusNotice> : null}
       {type === "round_trip" && selectedOutbound ? <ResultLeg label="Return" date={returnDate ?? ""} data={eligibleReturns} loading={inbound.isLoading} error={inbound.error?.message} retry={() => void inbound.refetch()} selectedId={inId} pax={pax} onSelect={setInId} onModify={() => setEditing(true)} /> : null}
@@ -115,7 +165,7 @@ export default function SearchResults() {
         <Button className="min-h-12 shrink-0" disabled={!selectedOutbound || !selectedReturn} onClick={() => chooseTrip(outId!, inId!)}>Review selected trips</Button>
       </div> : null}
     </> : null}
-  </main></PageShell>;
+  </main></CustomerLayout>;
 }
 
 function ResultLeg({ label, date, data, loading, error, retry, selectedId, pax, onSelect, direct, onModify }: {

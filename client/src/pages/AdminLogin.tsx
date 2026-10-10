@@ -1,5 +1,5 @@
-import { PageShell } from "@/components/Brand";
-import { ActionLink, PageIntro, StatusNotice } from "@/components/MetroUI";
+import { AdminAuthLayout } from "@/layouts/AdminLayout";
+import { PageIntro, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -67,7 +67,7 @@ export default function AdminLogin() {
   }
 
   return (
-    <PageShell>
+    <AdminAuthLayout>
       <section className="metro-page metro-page--readable flex min-h-[60vh] items-center">
         <div className="mx-auto w-full max-w-lg">
           <PageIntro eyebrow="Staff access" title="Admin sign in" description="Sign in to an authorized administrator account. This form cannot create or grant administrator access." />
@@ -104,10 +104,9 @@ export default function AdminLogin() {
               {oauthWorking ? "Opening Manus sign-in…" : "Use an existing Manus admin session instead"}
             </button>
           ) : null}
-          <ActionLink href="/" className="mt-5">Back to booking</ActionLink>
-          </div>
+                    </div>
         </div>
       </section>
-    </PageShell>
+    </AdminAuthLayout>
   );
 }

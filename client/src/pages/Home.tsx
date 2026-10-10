@@ -1,4 +1,4 @@
-import { PageShell } from "@/components/Brand";
+import { CustomerLayout } from "@/layouts/CustomerLayout";
 import {
   DigitalTicketStory, FinalBookingCta, HowItWorks,
   PopularRoutes, TravelInformation, WhyMetroPro,
@@ -134,8 +134,8 @@ export default function Home() {
   }
 
   return (
-    <PageShell>
-      <section className="relative h-[340px] overflow-hidden bg-[#0B1F3A] text-white sm:h-[440px] lg:h-[640px]" aria-labelledby="home-hero-title">
+    <CustomerLayout>
+      <section className="relative h-[340px] overflow-hidden bg-[#0891B2] text-white sm:h-[440px] lg:h-[640px]" aria-labelledby="home-hero-title">
         <img
           src="/manus-storage/async-images/tDmJ4PSy5Hs9geolWVIGfD/image-1.webp"
           alt=""
@@ -144,10 +144,10 @@ export default function Home() {
           fetchPriority="high"
           decoding="async"
         />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(11,31,58,0.85)_0%,rgba(11,31,58,0.56)_47%,rgba(11,31,58,0.34)_100%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,23,42,0.42)_0%,rgba(8,145,178,0.26)_47%,rgba(22,163,74,0.12)_100%)]" />
         <div className="container relative flex h-full items-start pt-9 sm:pt-16 lg:pt-28">
           <div className="max-w-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.23em] text-[#38BDF8]">Travel with Metro Pro</p>
+            <p className="text-xs font-bold uppercase tracking-[0.23em] text-[#DCFCE7]">Travel with Metro Pro</p>
             <h1 id="home-hero-title" className="mt-4 max-w-xl font-serif text-[2.3rem] leading-[1.08] tracking-tight sm:text-5xl lg:text-[3.75rem]">Travel comfortably.<br />Arrive confidently.</h1>
             <p className="mt-4 max-w-md text-base leading-relaxed text-white/90 sm:text-lg">Safe, comfortable and reliable journeys to your destination.</p>
             <p className="mt-4 text-sm font-medium text-white/80">New York City ↔ Columbus, Ohio</p>
@@ -229,7 +229,7 @@ export default function Home() {
               <div className="form-field"><Label htmlFor="member-login-password">Password</Label><Input id="member-login-password" type="password" autoComplete="current-password" className="h-12 bg-white" value={memberPassword} onChange={event => setMemberPassword(event.target.value)} required /></div>
               {memberError ? <p role="alert" className="text-sm text-destructive sm:col-span-2">{memberError}</p> : null}
               <div className="flex flex-wrap items-center justify-between gap-3 sm:col-span-2">
-                <Link href="/create-account" className="inline-flex min-h-11 items-center text-sm font-bold text-primary underline-offset-4 hover:underline">Create a member account</Link>
+                <div className="flex flex-wrap items-center gap-4"><Link href="/create-account" className="inline-flex min-h-11 items-center text-sm font-bold text-primary underline-offset-4 hover:underline">Create a member account</Link><Link href="/forgot-password" className="inline-flex min-h-11 items-center text-sm font-semibold text-muted-foreground underline-offset-4 hover:text-primary hover:underline">Forgot password?</Link></div>
                 <Button type="submit" className="h-12 w-full px-5 sm:w-auto" disabled={signIn.isPending}>{signIn.isPending ? "Signing in…" : "Sign in"} <ArrowRight size={17} className="ml-2" aria-hidden="true" /></Button>
               </div>
             </form>
@@ -244,6 +244,6 @@ export default function Home() {
       <TravelInformation />
       <FinalBookingCta />
       <noscript><h2>Metro Pro — New York City to Columbus passenger vans</h2><p>Search departures above to book a seat. Existing members can sign in; guest bookings use a private access code.</p></noscript>
-    </PageShell>
+    </CustomerLayout>
   );
 }

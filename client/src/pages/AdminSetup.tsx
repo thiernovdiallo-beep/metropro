@@ -1,4 +1,4 @@
-import { PageShell } from "@/components/Brand";
+import { AdminAuthLayout } from "@/layouts/AdminLayout";
 import { ActionLink, PageIntro, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,7 +43,7 @@ export default function AdminSetup() {
   }
 
   return (
-    <PageShell>
+    <AdminAuthLayout>
       <section className="metro-page metro-page--readable flex min-h-[60vh] items-center">
         <div className="mx-auto w-full max-w-lg">
           <PageIntro eyebrow="Private staff access" title="Set a new admin password" description="This one-time private link sets or resets a password for the invited administrator. A reset ends that administrator's previous password sessions; other administrators and Google/Apple sign-in are unchanged." />
@@ -77,6 +77,6 @@ export default function AdminSetup() {
           </div>
         </div>
       </section>
-    </PageShell>
+    </AdminAuthLayout>
   );
 }

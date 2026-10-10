@@ -1,5 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import { PageShell } from "@/components/Brand";
+import { AdminAuthLayout } from "@/layouts/AdminLayout";
 import { Redirect } from "wouter";
 
 export function AdminGuard({ children }: { children: React.ReactNode }) {
@@ -7,11 +7,11 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <PageShell>
+      <AdminAuthLayout>
         <div className="container py-16 text-sm text-muted-foreground" role="status">
           Checking administrator access…
         </div>
-      </PageShell>
+      </AdminAuthLayout>
     );
   }
 

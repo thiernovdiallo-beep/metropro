@@ -5,6 +5,7 @@ import {
   cities,
   departures,
   locations,
+  routeStops,
   routes,
   vehicles,
 } from "../../drizzle/schema";
@@ -15,6 +16,12 @@ import { remainingSeats, seatAvailability } from "../services/inventory";
 import { reconcileExpiredHolds } from "../services/hold-reconciliation";
 import { getSettings } from "../services/policies";
 import { publicProcedure, router } from "../_core/trpc";
+
+function coordinates(value: { latitude: number | null; longitude: number | null } | null | undefined) {
+  return value?.latitude != null && value.longitude != null
+    ? { lat: value.latitude, lng: value.longitude }
+    : null;
+}
 
 export const publicRouter = router({
   cities: publicProcedure.query(async () => {
@@ -31,15 +38,17 @@ export const publicRouter = router({
       membershipPriceCents: s.membershipPriceCents,
       membershipBenefits: s.membershipBenefits,
       emergencyContactRequired: s.emergencyContactRequired,
+      cancelCutoffHours: s.cancelCutoffHours,
     };
   }),
   routes: publicProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];
-    const [rs, cs, ls] = await Promise.all([
+    const [rs, cs, ls, ss] = await Promise.all([
       db.select().from(routes).where(eq(routes.isActive, true)),
       db.select().from(cities),
       db.select().from(locations),
+      db.select().from(routeStops),
     ]);
     const cityMap = new Map(cs.map(c => [c.id, c]));
     const locMap = new Map(ls.map(l => [l.id, l]));
@@ -49,6 +58,17 @@ export const publicRouter = router({
       destination: cityMap.get(r.destinationCityId)!,
       pickup: locMap.get(r.pickupLocationId)!,
       dropoff: locMap.get(r.dropoffLocationId)!,
+      originCoordinates: coordinates(cityMap.get(r.originCityId)),
+      destinationCoordinates: coordinates(cityMap.get(r.destinationCityId)),
+      pickupCoordinates: coordinates(locMap.get(r.pickupLocationId)),
+      dropoffCoordinates: coordinates(locMap.get(r.dropoffLocationId)),
+      stops: ss.filter(stop => stop.routeId === r.id).sort((a, b) => a.stopOrder - b.stopOrder).map(stop => ({
+        ...locMap.get(stop.locationId),
+        sequence: stop.stopOrder,
+        pickupAllowed: stop.pickupAllowed,
+        dropoffAllowed: stop.dropoffAllowed,
+        coordinates: coordinates(locMap.get(stop.locationId)),
+      })),
     }));
   }),
   seatOptions: publicProcedure
@@ -78,6 +98,8 @@ export const publicRouter = router({
         db.select().from(locations).where(eq(locations.id, route.dropoffLocationId)).limit(1).then(rows => rows[0] ?? null),
         dep.vehicleId ? db.select({ code: vehicles.code, status: vehicles.status, capacity: vehicles.capacity }).from(vehicles).where(eq(vehicles.id, dep.vehicleId)).limit(1).then(rows => rows[0] ?? null) : Promise.resolve(null),
       ]);
+      const stopRows = await db.select().from(routeStops).where(eq(routeStops.routeId, route.id));
+      const locationMap = new Map((await db.select().from(locations)).map(location => [location.id, location]));
       if (!vehicle || ["maintenance", "out_of_service"].includes(vehicle.status) || vehicle.capacity < dep.capacity) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Departure is not available for booking" });
       }
@@ -89,6 +111,12 @@ export const publicRouter = router({
         memberEarlyAccessAt: dep.memberEarlyAccessAt,
         vehicleCode: vehicle?.code ?? null,
         origin, destination, pickup, dropoff,
+        stops: stopRows.sort((a, b) => a.stopOrder - b.stopOrder).map(stop => ({
+          ...locationMap.get(stop.locationId),
+          sequence: stop.stopOrder,
+          pickupAllowed: stop.pickupAllowed,
+          dropoffAllowed: stop.dropoffAllowed,
+        })),
         standardFareCents: route.standardFareCents,
         memberFareCents: route.memberFareCents,
         frontFareCents: route.frontFareCents,
@@ -125,7 +153,7 @@ export const publicRouter = router({
       const membership = ctx.user ? await getActiveMembership(ctx.user.id) : null;
       const memberProfile = membership && ctx.user ? await getMemberProfileStatus(ctx.user.id) : null;
       const eligibleMember = Boolean(membership && memberProfile?.complete);
-      const [cs, ls, vs, deps] = await Promise.all([
+      const [cs, ls, vs, deps, ss] = await Promise.all([
         db.select().from(cities),
         db.select().from(locations),
         db.select().from(vehicles),
@@ -139,6 +167,7 @@ export const publicRouter = router({
               lt(departures.departAt, range.end)
             )
           ),
+        db.select().from(routeStops),
       ]);
       const cityMap = new Map(cs.map(c => [c.id, c]));
       const locMap = new Map(ls.map(l => [l.id, l]));
@@ -175,6 +204,17 @@ export const publicRouter = router({
             dropoff: locMap.get(route.dropoffLocationId),
             origin: cityMap.get(route.originCityId),
             destination: cityMap.get(route.destinationCityId),
+            originCoordinates: coordinates(cityMap.get(route.originCityId)),
+            destinationCoordinates: coordinates(cityMap.get(route.destinationCityId)),
+            pickupCoordinates: coordinates(locMap.get(route.pickupLocationId)),
+            dropoffCoordinates: coordinates(locMap.get(route.dropoffLocationId)),
+            stops: ss.filter(stop => stop.routeId === route.id).sort((a, b) => a.stopOrder - b.stopOrder).map(stop => ({
+              ...locMap.get(stop.locationId),
+              sequence: stop.stopOrder,
+              pickupAllowed: stop.pickupAllowed,
+              dropoffAllowed: stop.dropoffAllowed,
+              coordinates: coordinates(locMap.get(stop.locationId)),
+            })),
             vehicleCode: d.vehicleId ? vehicleMap.get(d.vehicleId)?.code : null,
             status: d.status,
             routeId: route.id,

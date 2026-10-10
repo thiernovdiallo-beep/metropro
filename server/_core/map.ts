@@ -89,6 +89,28 @@ export async function makeRequest<T = unknown>(
   return (await response.json()) as T;
 }
 
+export async function fetchStaticMap(params: {
+  center?: string;
+  zoom?: number;
+  size?: string;
+  markers: string[];
+  path?: string;
+  maptype?: MapType;
+}) {
+  const { baseUrl, apiKey } = getMapsConfig();
+  const url = new URL(`${baseUrl}/v1/maps/proxy/maps/api/staticmap`);
+  url.searchParams.set("key", apiKey);
+  if (params.center) url.searchParams.set("center", params.center);
+  if (params.zoom !== undefined) url.searchParams.set("zoom", String(params.zoom));
+  url.searchParams.set("size", params.size ?? "640x360");
+  url.searchParams.set("maptype", params.maptype ?? "roadmap");
+  params.markers.forEach(marker => url.searchParams.append("markers", marker));
+  if (params.path) url.searchParams.set("path", params.path);
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Google static map request failed (${response.status})`);
+  return { body: Buffer.from(await response.arrayBuffer()), contentType: response.headers.get("content-type") ?? "image/png" };
+}
+
 // ============================================================================
 // Type Definitions
 // ============================================================================

@@ -1,4 +1,4 @@
-import { PageShell } from "@/components/Brand";
+import { CustomerLayout } from "@/layouts/CustomerLayout";
 import { ActionLink, PageIntro, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { moneyExact } from "@/lib/format";
@@ -35,7 +35,7 @@ export default function Membership() {
   }
 
   return (
-    <PageShell>
+    <CustomerLayout>
       <div className="metro-page metro-page--readable">
         <PageIntro
           eyebrow="Metro Pro Member"
@@ -77,6 +77,6 @@ export default function Membership() {
           )}
         </div>
       </div>
-    </PageShell>
+    </CustomerLayout>
   );
 }
