@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyticsDateRange, averagePaidSeatCents } from "./analytics";
+import { analyticsDateRange, averagePaidSeatCents, buildRevenueTrend } from "./analytics";
 
 describe("New York operations analytics", () => {
   it("uses 23-hour and 25-hour local days when clocks change", () => {
@@ -23,5 +23,17 @@ describe("New York operations analytics", () => {
     expect(averagePaidSeatCents(30000, 2)).toBe(15000);
     expect(averagePaidSeatCents(60000, 4)).toBe(15000);
     expect(averagePaidSeatCents(0, 0)).toBe(0);
+  });
+  it("builds a New York-local gross, refund, and net revenue trend", () => {
+    const trend = buildRevenueTrend([
+      { kind: "ticket", amountCents: 15000, createdAt: new Date("2026-10-06T15:00:00Z") },
+      { kind: "membership", amountCents: 2500, createdAt: new Date("2026-10-07T15:00:00Z") },
+    ], [{ amountCents: 5000, updatedAt: new Date("2026-10-07T18:00:00Z") }], {
+      start: new Date("2026-10-06T04:00:00Z"), end: new Date("2026-10-08T04:00:00Z"),
+    });
+    expect(trend).toEqual([
+      { date: "2026-10-06", grossTicketCents: 15000, membershipCents: 0, refundsCents: 0, netRevenueCents: 15000 },
+      { date: "2026-10-07", grossTicketCents: 0, membershipCents: 2500, refundsCents: 5000, netRevenueCents: -2500 },
+    ]);
   });
 });

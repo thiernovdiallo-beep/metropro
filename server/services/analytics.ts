@@ -110,6 +110,63 @@ export function averagePaidSeatCents(totalCents: number, seatCount: number) {
   return seatCount > 0 ? Math.round(totalCents / seatCount) : 0;
 }
 
+export type RevenueTrendPayment = {
+  kind: "ticket" | "membership";
+  amountCents: number;
+  createdAt: Date;
+};
+
+export type RevenueTrendRefund = {
+  amountCents: number;
+  updatedAt: Date;
+};
+
+function newYorkDateKey(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+export function buildRevenueTrend(
+  paymentRows: readonly RevenueTrendPayment[],
+  refundRows: readonly RevenueTrendRefund[],
+  range?: { start: Date; end: Date },
+) {
+  const rows = new Map<string, { grossTicketCents: number; membershipCents: number; refundsCents: number }>();
+  const ensure = (date: string) => {
+    const existing = rows.get(date);
+    if (existing) return existing;
+    const created = { grossTicketCents: 0, membershipCents: 0, refundsCents: 0 };
+    rows.set(date, created);
+    return created;
+  };
+  for (const payment of paymentRows) {
+    const row = ensure(newYorkDateKey(payment.createdAt));
+    if (payment.kind === "ticket") row.grossTicketCents += payment.amountCents;
+    else row.membershipCents += payment.amountCents;
+  }
+  for (const refund of refundRows) ensure(newYorkDateKey(refund.updatedAt)).refundsCents += refund.amountCents;
+
+  if (range) {
+    const startDate = newYorkDateKey(range.start);
+    const endDate = newYorkDateKey(new Date(range.end.getTime() - 1));
+    const start = Date.UTC(Number(startDate.slice(0, 4)), Number(startDate.slice(5, 7)) - 1, Number(startDate.slice(8, 10)));
+    const end = Date.UTC(Number(endDate.slice(0, 4)), Number(endDate.slice(5, 7)) - 1, Number(endDate.slice(8, 10)));
+    for (let cursor = start; cursor <= end; cursor += 86_400_000) {
+      const date = new Date(cursor).toISOString().slice(0, 10);
+      ensure(date);
+    }
+  }
+
+  return [...rows.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, values]) => ({
+    date,
+    ...values,
+    netRevenueCents: values.grossTicketCents + values.membershipCents - values.refundsCents,
+  }));
+}
+
 export type AnalyticsPeriod = "all" | "today" | "week" | "month" | "custom";
 
 function nyDate(now: Date) {
@@ -177,6 +234,9 @@ export async function getAnalytics(range?: { start: Date; end: Date }) {
   const members = await db.select().from(memberships).where(eq(memberships.status, "active"));
   const succeeded = await db.select().from(payments).where(and(eq(payments.status, "succeeded"),
     range ? and(gte(payments.createdAt, range.start), lt(payments.createdAt, range.end)) : undefined));
+  const successfulRefunds = await db.select({ amountCents: refunds.amountCents, updatedAt: refunds.updatedAt })
+    .from(refunds).where(and(eq(refunds.status, "succeeded"),
+      range ? and(gte(refunds.updatedAt, range.start), lt(refunds.updatedAt, range.end)) : undefined));
 
   const occupancyByDeparture = periodDeps.map(d => {
     const pct = d.capacity ? Math.round((d.seatsSold / d.capacity) * 100) : 0;
@@ -203,6 +263,13 @@ export async function getAnalytics(range?: { start: Date; end: Date }) {
   const membershipRevenue = succeeded
     .filter(p => p.kind === "membership")
     .reduce((s, p) => s + p.amountCents, 0);
+  const grossTicketRevenue = ticketPayments.reduce((s, p) => s + p.amountCents, 0);
+  const refundRevenue = successfulRefunds.reduce((s, refund) => s + refund.amountCents, 0);
+  const revenueTrend = buildRevenueTrend(
+    succeeded.map(payment => ({ kind: payment.kind, amountCents: payment.amountCents, createdAt: payment.createdAt })),
+    successfulRefunds,
+    range,
+  );
 
   const paidByBooking = new Map<number, number>();
   for (const p of ticketPayments) {
@@ -252,6 +319,22 @@ export async function getAnalytics(range?: { start: Date; end: Date }) {
     revenueCents: revenuePerTripMap.get(d.id) ?? 0,
   }));
 
+  const routePerformance = allRoutes.map(route => {
+    const deps = periodDeps.filter(departure => departure.routeId === route.id);
+    const capacity = deps.reduce((sum, departure) => sum + departure.capacity, 0);
+    const seatsSold = deps.reduce((sum, departure) => sum + departure.seatsSold, 0);
+    const revenueCents = revenueByRouteMap.get(route.id) ?? 0;
+    return {
+      routeId: route.id,
+      trips: deps.length,
+      seatsSold,
+      capacity,
+      occupancyPercent: capacity ? Math.round((seatsSold / capacity) * 100) : 0,
+      revenueCents,
+      averageRevenuePerTripCents: deps.length ? Math.round(revenueCents / deps.length) : 0,
+    };
+  }).filter(item => item.trips > 0 || item.revenueCents > 0);
+
   const bookingById = new Map(confirmed.map(booking => [booking.id, booking]));
   const paidSeatCount = ticketPayments.reduce((total, payment) => {
     const booking = payment.bookingId ? bookingById.get(payment.bookingId) : null;
@@ -292,6 +375,16 @@ export async function getAnalytics(range?: { start: Date; end: Date }) {
     revenueByRoute,
     revenueByVehicle,
     revenuePerTrip,
+    routePerformance,
+    revenueTrend,
+    revenueSummary: {
+      grossTicketRevenueCents: grossTicketRevenue,
+      membershipRevenueCents: membershipRevenue,
+      refundsCents: refundRevenue,
+      netRevenueCents: grossTicketRevenue + membershipRevenue - refundRevenue,
+      confirmedBookings: confirmed.filter(booking => !range || (booking.createdAt >= range.start && booking.createdAt < range.end)).length,
+      paidTicketTransactions: ticketPayments.length,
+    },
     averageTicketCents: avgTicket,
     membershipRevenueCents: membershipRevenue,
     activeMembers: members.length,
