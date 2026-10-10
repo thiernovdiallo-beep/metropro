@@ -1,7 +1,7 @@
 import { PageIntro, ResourceState, StatusBadge, StatusNotice } from "@/components/MetroUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { analyticsToCsv } from "@/lib/analytics-export";
+import { analyticsToCsv, analyticsToPrintableHtml } from "@/lib/analytics-export";
 import { formatDate, isoDate, moneyExact } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
@@ -56,6 +56,16 @@ export default function AnalyticsDashboard() {
     link.remove();
     URL.revokeObjectURL(url);
   };
+  const printPdfReport = () => {
+    if (!a) return;
+    const periodLabel = applied.period === "custom" ? `${applied.from} to ${applied.to}` : applied.period;
+    const reportWindow = window.open("", "_blank");
+    if (!reportWindow) return;
+    reportWindow.document.open();
+    reportWindow.document.write(analyticsToPrintableHtml(a, periodLabel));
+    reportWindow.document.close();
+    reportWindow.setTimeout(() => { reportWindow.focus(); reportWindow.print(); }, 250);
+  };
   const hasDaySales = Boolean(a?.popularDays.some(item => item.seats > 0));
   return <div className="min-w-0"><PageIntro eyebrow="Operations intelligence" title="Analytics" description="Occupancy uses departure dates; revenue uses recorded successful payment dates. Periods follow New York local calendar days. Active memberships are the current count." />
     <section className="ticket-card flex flex-wrap items-end gap-3 p-4" role="group" aria-label="Analytics date range">
@@ -64,7 +74,7 @@ export default function AnalyticsDashboard() {
         <label className="form-field">From<Input type="date" required className="metro-control" value={from} onChange={event => setFrom(event.target.value)} /></label>
         <label className="form-field">To<Input type="date" required min={from} className="metro-control" value={to} onChange={event => setTo(event.target.value)} /></label>
         <Button type="submit" className="min-h-11">Apply dates</Button></form> : null}
-      <Button type="button" variant="outline" className="min-h-11 sm:ml-auto" disabled={!a || q.isFetching} onClick={exportReport}>Download CSV report</Button>
+      <div className="flex flex-wrap gap-2 sm:ml-auto"><Button type="button" variant="outline" className="min-h-11" disabled={!a || q.isFetching} onClick={exportReport}>Download CSV report</Button><Button type="button" variant="outline" className="min-h-11" disabled={!a || q.isFetching} onClick={printPdfReport}>Print / Save PDF</Button></div>
     </section>
     {routes.error || cities.error || vans.error ? <StatusNotice tone="pending" className="mt-5">Some route or vehicle labels are still loading; metrics remain based on the selected period.</StatusNotice> : null}
     <div className="mt-6"><ResourceState loading={q.isLoading} error={q.error ? `Metrics could not be loaded. ${q.error.message}` : null} empty={!a} emptyTitle="No analytics data available" emptyDescription="Metrics will appear when operational data is available for this period." onRetry={() => void q.refetch()}>

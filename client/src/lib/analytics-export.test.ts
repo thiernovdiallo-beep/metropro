@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyticsToCsv } from "./analytics-export";
+import { analyticsToCsv, analyticsToPrintableHtml } from "./analytics-export";
 
 describe("analytics CSV export", () => {
   it("includes revenue sections and escapes comma-containing labels", () => {
@@ -25,5 +25,18 @@ describe("analytics CSV export", () => {
     expect(csv).toContain('1,"MP-001, East",150.00');
     expect(csv).toContain("Daily Revenue Trend\n");
     expect(csv.endsWith("\n")).toBe(true);
+
+    const html = analyticsToPrintableHtml({
+      revenueSummary: { netRevenueCents: 12500, grossTicketRevenueCents: 15000, membershipRevenueCents: 2500, refundsCents: 5000, confirmedBookings: 2, paidTicketTransactions: 1 },
+      revenueTrend: [],
+      routePerformance: [],
+      revenueByVehicle: [{ vehicleId: 1, code: "MP-001, East", revenueCents: 15000 }],
+      revenuePerTrip: [],
+      occupancyByDeparture: [],
+    }, "This month");
+    expect(html).toContain("MetroPro Revenue Reporting");
+    expect(html).toContain("Revenue by Vehicle");
+    expect(html).toContain("MP-001, East");
+    expect(html).toContain("125.00");
   });
 });
