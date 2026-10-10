@@ -13,6 +13,22 @@ type FareRoute = {
   frontFareCents: number;
 };
 
+export type FareSegment = {
+  segmentOrder: number;
+  fromLocationId: number;
+  toLocationId: number;
+  capacity: number;
+  seatsSold: number;
+  seatsHeld: number;
+};
+
+type PassengerStopSelection = {
+  outboundPickupLocationId?: number;
+  outboundDropoffLocationId?: number;
+  returnPickupLocationId?: number;
+  returnDropoffLocationId?: number;
+};
+
 export function frontCount(passengers: SeatSelection[], leg: "outbound" | "return") {
   return passengers.filter(p => (leg === "outbound" ? p.outboundSeatType : p.returnSeatType) === "front").length;
 }
@@ -57,6 +73,69 @@ export function legFareCents(route: FareRoute, passengers: SeatSelection[], leg:
   return passengers.reduce((sum, passenger) => {
     const seat = leg === "outbound" ? passenger.outboundSeatType : passenger.returnSeatType;
     return sum + (seat ? seatFareCents(route, seat, passenger.isMemberTraveler) : 0);
+  }, 0);
+}
+
+/**
+ * Dynamic availability multiplier for one route segment.
+ * The first half of capacity remains at the configured fare; the price rises
+ * only as a segment becomes constrained. Rounding happens at the segment level
+ * so a multi-stop fare is deterministic and never loses a cent.
+ */
+export function segmentAvailabilityMultiplier(segment: Pick<FareSegment, "capacity" | "seatsSold" | "seatsHeld">) {
+  if (segment.capacity <= 0) return 1;
+  const remaining = Math.max(0, segment.capacity - segment.seatsSold - segment.seatsHeld);
+  const ratio = remaining / segment.capacity;
+  if (ratio <= 0.25) return 1.25;
+  if (ratio <= 0.5) return 1.1;
+  return 1;
+}
+
+function fareStopOrder(segments: readonly FareSegment[]) {
+  const order = new Map<number, number>();
+  for (const segment of segments) {
+    order.set(segment.fromLocationId, segment.segmentOrder);
+    order.set(segment.toLocationId, segment.segmentOrder + 1);
+  }
+  return order;
+}
+
+export function passengerFareCents(
+  route: FareRoute & { pickupLocationId: number; dropoffLocationId: number },
+  segments: readonly FareSegment[] | undefined,
+  passenger: SeatSelection & PassengerStopSelection,
+  leg: "outbound" | "return",
+) {
+  const seat = leg === "outbound" ? passenger.outboundSeatType : passenger.returnSeatType;
+  if (!seat) return 0;
+  const configuredFare = seatFareCents(route, seat, passenger.isMemberTraveler);
+  if (!segments?.length) return configuredFare;
+
+  const pickup = leg === "outbound" ? passenger.outboundPickupLocationId : passenger.returnPickupLocationId;
+  const dropoff = leg === "outbound" ? passenger.outboundDropoffLocationId : passenger.returnDropoffLocationId;
+  const first = pickup ?? route.pickupLocationId;
+  const last = dropoff ?? route.dropoffLocationId;
+  const order = fareStopOrder(segments);
+  const fromOrder = order.get(first);
+  const toOrder = order.get(last);
+  if (fromOrder == null || toOrder == null || fromOrder >= toOrder) return configuredFare;
+
+  const totalSegments = segments.length;
+  const traveled = segments.filter(segment => segment.segmentOrder >= fromOrder && segment.segmentOrder < toOrder);
+  return traveled.reduce((total, segment) => {
+    const baseSegmentFare = configuredFare / totalSegments;
+    return total + Math.round(baseSegmentFare * segmentAvailabilityMultiplier(segment));
+  }, 0);
+}
+
+export function dynamicLegFareCents(
+  route: FareRoute & { pickupLocationId: number; dropoffLocationId: number },
+  segments: readonly FareSegment[] | undefined,
+  passengers: (SeatSelection & PassengerStopSelection)[],
+  leg: "outbound" | "return",
+) {
+  return passengers.reduce((sum, passenger) => {
+    return sum + passengerFareCents(route, segments, passenger, leg);
   }, 0);
 }
 

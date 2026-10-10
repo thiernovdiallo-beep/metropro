@@ -2,17 +2,17 @@ import { TRPCError } from "@trpc/server";
 import { FIRST_PARTY_HEADER } from "@shared/const";
 import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
-import { bookings, cities, departures, locations, passengers, payments, refunds, routeStops, routes, tickets } from "../../drizzle/schema";
+import { bookings, cities, departureSegmentInventory, departures, locations, passengers, payments, refunds, routeStops, routes, tickets } from "../../drizzle/schema";
 import { getActiveMembership, getDb } from "../db";
 import { createGuestAccess, hasGuestAccess } from "../services/guest-access";
 import { approvedCheckoutOrigin } from "../services/checkout-origin";
 import { assertBookable, expireStaleHolds, holdSeatsInTransaction, releaseHoldsInTransaction } from "../services/inventory";
 import { getMemberProfileStatus } from "../services/member-profile";
-import { frontCount, legFareCents, seatFareCents, validateSeatSelections, type SeatSelection } from "../services/pricing";
+import { dynamicLegFareCents, frontCount, passengerFareCents, seatFareCents, validateSeatSelections, type FareSegment, type SeatSelection } from "../services/pricing";
 import { getSettings } from "../services/policies";
 import { getSeatAvailability } from "../services/seat-inventory";
 import { validateNumberedSeats } from "../services/seat-selection";
-import { holdSegmentInventoryInTransaction, releaseSegmentInventoryInTransaction } from "../services/segment-inventory";
+import { ensureDepartureSegments, holdSegmentInventoryInTransaction, releaseSegmentInventoryInTransaction } from "../services/segment-inventory";
 import { reconcilePendingRefunds } from "../services/refund-lifecycle";
 import { throttleSeatMap } from "../services/seat-map-rate-limit";
 import { makeBookingNumber } from "../services/tickets";
@@ -98,7 +98,7 @@ export function lineItemsForLeg(departure: DepartureDetails, selections: Numbere
   for (const [index, p] of selections.entries()) {
     const seat = leg === "outbound" ? p.outboundSeatType : p.returnSeatType;
     if (!seat) continue;
-    const unit = seatFareCents(departure.route, seat, p.isMemberTraveler);
+    const unit = passengerFareCents(departure.route, departure.segments, p, leg);
     const label = seat === "front" ? "Front passenger seat" : p.isMemberTraveler ? "Member regular seat" : "Regular seat";
     const description = `${departure.origin.name} → ${departure.destination.name} · ${label}`;
     const key = `${unit}:${description}`;
@@ -188,7 +188,7 @@ export const bookingRouter = router({
         name: `${p.firstName} ${p.lastName}`,
         seatNumber: p.seatNumber ?? null,
         seatType: p.outboundSeatType,
-        amountCents: seatFareCents(outbound.route, p.outboundSeatType, p.isMemberTraveler),
+        amountCents: passengerFareCents(outbound.route, outbound.segments, p, "outbound"),
         memberFareApplied: p.isMemberTraveler && p.outboundSeatType === "standard",
         pickupLabel: p.outboundPickupLocationId ? selectedLocationMap.get(p.outboundPickupLocationId)?.label ?? null : null,
         dropoffLabel: p.outboundDropoffLocationId ? selectedLocationMap.get(p.outboundDropoffLocationId)?.label ?? null : null,
@@ -197,7 +197,7 @@ export const bookingRouter = router({
         name: `${p.firstName} ${p.lastName}`,
         seatNumber: p.returnSeatNumber ?? null,
         seatType: p.returnSeatType,
-        amountCents: seatFareCents(ret.route, p.returnSeatType!, p.isMemberTraveler),
+        amountCents: passengerFareCents(ret.route, ret.segments, p, "return"),
         memberFareApplied: p.isMemberTraveler && p.returnSeatType === "standard",
         pickupLabel: p.returnPickupLocationId ? selectedLocationMap.get(p.returnPickupLocationId)?.label ?? null : null,
         dropoffLabel: p.returnDropoffLocationId ? selectedLocationMap.get(p.returnDropoffLocationId)?.label ?? null : null,
@@ -207,7 +207,7 @@ export const bookingRouter = router({
         fareType: input.passengers.some(p => p.isMemberTraveler && (p.outboundSeatType === "standard" || p.returnSeatType === "standard")) ? "member" : "standard",
         outboundBreakdown,
         returnBreakdown,
-        amountCents: legFareCents(outbound.route, input.passengers, "outbound") + (ret ? legFareCents(ret.route, input.passengers, "return") : 0),
+        amountCents: dynamicLegFareCents(outbound.route, outbound.segments, input.passengers, "outbound") + (ret ? dynamicLegFareCents(ret.route, ret.segments, input.passengers, "return") : 0),
         outbound,
         returnTrip: ret,
       };
@@ -257,8 +257,8 @@ export const bookingRouter = router({
         throw new TRPCError({ code: "CONFLICT", message: error instanceof Error ? error.message : "Selected seats are sold out" });
       }
 
-      const outboundQuotedCents = legFareCents(outbound.route, input.passengers, "outbound");
-      const returnQuotedCents = ret ? legFareCents(ret.route, input.passengers, "return") : 0;
+      const outboundQuotedCents = dynamicLegFareCents(outbound.route, outbound.segments, input.passengers, "outbound");
+      const returnQuotedCents = ret ? dynamicLegFareCents(ret.route, ret.segments, input.passengers, "return") : 0;
       const amountCents = outboundQuotedCents + returnQuotedCents;
       const bookingNumber = makeBookingNumber();
       const guestAccess = ctx.user ? null : createGuestAccess();
@@ -435,5 +435,20 @@ async function loadPricedDeparture(id: number) {
   const [destination] = await db.select().from(cities).where(eq(cities.id, route.destinationCityId)).limit(1);
   const [pickup] = await db.select().from(locations).where(eq(locations.id, route.pickupLocationId)).limit(1);
   const [dropoff] = await db.select().from(locations).where(eq(locations.id, route.dropoffLocationId)).limit(1);
-  return { ...dep, route, origin, destination, pickup, dropoff };
+  let segments = await db.select().from(departureSegmentInventory)
+    .where(eq(departureSegmentInventory.departureId, id))
+    .orderBy(departureSegmentInventory.segmentOrder);
+  if (!segments.length) {
+    try {
+      segments = await db.transaction(tx => ensureDepartureSegments(tx, id));
+    } catch (error) {
+      // A concurrent first booking may create the rows between the initial
+      // read and initialization. Re-read the committed ledger in that case.
+      if (!(error instanceof Error && error.message.includes("Duplicate"))) throw error;
+      segments = await db.select().from(departureSegmentInventory)
+        .where(eq(departureSegmentInventory.departureId, id))
+        .orderBy(departureSegmentInventory.segmentOrder);
+    }
+  }
+  return { ...dep, route, origin, destination, pickup, dropoff, segments };
 }
