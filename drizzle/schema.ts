@@ -292,6 +292,30 @@ export const departures = mysqlTable(
   ]
 );
 
+// One inventory row per consecutive route stop pair. Departure-wide counters
+// remain the compatibility guard; these counters prevent overbooking a segment
+// when passengers board and leave at different stops.
+export const departureSegmentInventory = mysqlTable(
+  "departureSegmentInventory",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    departureId: int("departureId").notNull(),
+    segmentOrder: int("segmentOrder").notNull(),
+    fromLocationId: int("fromLocationId").notNull(),
+    toLocationId: int("toLocationId").notNull(),
+    capacity: int("capacity").notNull(),
+    seatsSold: int("seatsSold").notNull().default(0),
+    seatsHeld: int("seatsHeld").notNull().default(0),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [
+    uniqueIndex("departureSegmentInventory_departure_order_unique").on(table.departureId, table.segmentOrder),
+    index("departureSegmentInventory_departure_idx").on(table.departureId),
+    index("departureSegmentInventory_locations_idx").on(table.fromLocationId, table.toLocationId),
+  ]
+);
+
 export const bookings = mysqlTable(
   "bookings",
   {

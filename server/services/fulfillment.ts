@@ -5,6 +5,7 @@ import { affectedRows, insertId } from "../lib/mysql";
 import { TEMPLATES, notify } from "./notifications";
 import { inventoryTransaction, lockDepartureInventory } from "./inventory";
 import { makeQrToken } from "./tickets";
+import { convertSegmentInventoryInTransaction, releaseSegmentInventoryInTransaction } from "./segment-inventory";
 
 export type TicketFulfillmentResult = "confirmed" | "already_confirmed" | "already_refunded" | "unavailable" | "missing";
 
@@ -38,13 +39,21 @@ export async function fulfillTicketPayment(opts: {
     if (booking.status === "refunded") return { state: "already_refunded" as const, booking };
     if (booking.status !== "pending_payment") return { state: "unavailable" as const, booking };
     await lockDepartureInventory(tx, [booking.outboundDepartureId, booking.returnDepartureId]);
+    const itinerary = await tx.select({
+      outboundPickupLocationId: passengers.outboundPickupLocationId,
+      outboundDropoffLocationId: passengers.outboundDropoffLocationId,
+      returnPickupLocationId: passengers.returnPickupLocationId,
+      returnDropoffLocationId: passengers.returnDropoffLocationId,
+    }).from(passengers).where(eq(passengers.bookingId, booking.id));
     if (!booking.holdExpiresAt || booking.holdExpiresAt <= new Date()) {
       const release = async (departureId: number, count: number, frontCount: number) => tx.execute(sql`
         UPDATE departures SET seatsHeld = GREATEST(seatsHeld - ${count}, 0),
           frontSeatsHeld = GREATEST(frontSeatsHeld - ${frontCount}, 0)
         WHERE id = ${departureId}`);
       await release(booking.outboundDepartureId, booking.passengerCount, booking.outboundFrontSeats);
+      await releaseSegmentInventoryInTransaction(tx, booking.outboundDepartureId, itinerary, "outbound");
       if (booking.returnDepartureId) await release(booking.returnDepartureId, booking.passengerCount, booking.returnFrontSeats);
+      if (booking.returnDepartureId) await releaseSegmentInventoryInTransaction(tx, booking.returnDepartureId, itinerary, "return");
       await tx.update(passengers).set({ departureId: null, seatNumber: null, outboundPickupLocationId: null, outboundDropoffLocationId: null, returnDepartureId: null, returnSeatNumber: null, returnPickupLocationId: null, returnDropoffLocationId: null })
         .where(eq(passengers.bookingId, booking.id));
       await tx.update(payments).set({ status: "failed" }).where(eq(payments.bookingId, booking.id));
@@ -64,8 +73,10 @@ export async function fulfillTicketPayment(opts: {
       if (!affectedRows(updated)) throw new Error("Paid ticket needs manual review: selected seat hold is unavailable");
     };
     await convert(booking.outboundDepartureId, booking.passengerCount, booking.outboundFrontSeats);
+    await convertSegmentInventoryInTransaction(tx, booking.outboundDepartureId, itinerary, "outbound");
     if (booking.returnDepartureId) {
       await convert(booking.returnDepartureId, booking.passengerCount, booking.returnFrontSeats);
+      await convertSegmentInventoryInTransaction(tx, booking.returnDepartureId, itinerary, "return");
     }
 
     const pax = await tx.select().from(passengers).where(eq(passengers.bookingId, booking.id));
@@ -150,6 +161,12 @@ export async function failTicketPayment(bookingId: number) {
     const [booking] = await tx.select().from(bookings).where(eq(bookings.id, bookingId)).limit(1).for("update");
     if (!booking || booking.status !== "pending_payment") return;
     await lockDepartureInventory(tx, [booking.outboundDepartureId, booking.returnDepartureId]);
+    const itinerary = await tx.select({
+      outboundPickupLocationId: passengers.outboundPickupLocationId,
+      outboundDropoffLocationId: passengers.outboundDropoffLocationId,
+      returnPickupLocationId: passengers.returnPickupLocationId,
+      returnDropoffLocationId: passengers.returnDropoffLocationId,
+    }).from(passengers).where(eq(passengers.bookingId, booking.id));
     const release = async (departureId: number, count: number, frontCount: number) => {
       await tx.execute(sql`
         UPDATE departures
@@ -159,7 +176,9 @@ export async function failTicketPayment(bookingId: number) {
       `);
     };
     await release(booking.outboundDepartureId, booking.passengerCount, booking.outboundFrontSeats);
+    await releaseSegmentInventoryInTransaction(tx, booking.outboundDepartureId, itinerary, "outbound");
     if (booking.returnDepartureId) await release(booking.returnDepartureId, booking.passengerCount, booking.returnFrontSeats);
+    if (booking.returnDepartureId) await releaseSegmentInventoryInTransaction(tx, booking.returnDepartureId, itinerary, "return");
     await tx.update(passengers).set({ departureId: null, seatNumber: null, outboundPickupLocationId: null, outboundDropoffLocationId: null, returnDepartureId: null, returnSeatNumber: null, returnPickupLocationId: null, returnDropoffLocationId: null })
       .where(eq(passengers.bookingId, booking.id));
     await tx.update(bookings).set({ status: "canceled", holdExpiresAt: null }).where(eq(bookings.id, booking.id));

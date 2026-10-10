@@ -8,6 +8,7 @@ import { validateNumberedSeats } from "./seat-selection";
 import { TEMPLATES, notify } from "./notifications";
 import { canSelfServeChange, getSettings } from "./policies";
 import { makeQrToken } from "./tickets";
+import { restoreSegmentInventoryInTransaction, sellSegmentInventoryInTransaction } from "./segment-inventory";
 
 export type RescheduleRequest = {
   bookingId: number;
@@ -102,9 +103,13 @@ export async function rescheduleWithNumberedSeats(input: RescheduleRequest, acto
       if (!affectedRows(result)) throw new Error("Original sold-seat inventory is inconsistent; no changes were committed.");
     };
     await sell(newOut.id, booking.passengerCount, booking.outboundFrontSeats);
+    await sellSegmentInventoryInTransaction(tx, newOut.id, personRows, "outbound");
     if (newRet) await sell(newRet.id, booking.passengerCount, booking.returnFrontSeats);
+    if (newRet) await sellSegmentInventoryInTransaction(tx, newRet.id, personRows, "return");
     await restore(oldOut.id, booking.passengerCount, booking.outboundFrontSeats);
+    await restoreSegmentInventoryInTransaction(tx, oldOut.id, personRows, "outbound");
     if (oldRet) await restore(oldRet.id, booking.passengerCount, booking.returnFrontSeats);
+    if (oldRet) await restoreSegmentInventoryInTransaction(tx, oldRet.id, personRows, "return");
 
     await tx.update(tickets).set({ status: "voided" }).where(eq(tickets.bookingId, booking.id));
     for (const [index, person] of personRows.entries()) {

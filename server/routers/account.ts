@@ -25,6 +25,7 @@ import { approvedCheckoutOrigin } from "../services/checkout-origin";
 import { getDeparture, inventoryTransaction, lockDepartureInventory } from "../services/inventory";
 import { rescheduleWithNumberedSeats } from "../services/rescheduling";
 import { beginBookingRefund, reconcilePendingRefunds, submitRefundIntent } from "../services/refund-lifecycle";
+import { restoreSegmentInventoryInTransaction } from "../services/segment-inventory";
 import { getMemberProfileStatus, saveMemberIdPhoto } from "../services/member-profile";
 import { normalizeMemberEmail } from "../services/member-auth";
 import { TEMPLATES, notify } from "../services/notifications";
@@ -344,11 +345,19 @@ export const accountRouter = router({
           const [current] = await tx.select().from(bookings).where(eq(bookings.id, booking.id)).limit(1).for("update");
           if (current?.status !== "confirmed") throw new TRPCError({ code: "BAD_REQUEST", message: "Booking is already canceled or refunded." });
           await lockDepartureInventory(tx, [current.outboundDepartureId, current.returnDepartureId]);
+          const itinerary = await tx.select({
+            outboundPickupLocationId: passengers.outboundPickupLocationId,
+            outboundDropoffLocationId: passengers.outboundDropoffLocationId,
+            returnPickupLocationId: passengers.returnPickupLocationId,
+            returnDropoffLocationId: passengers.returnDropoffLocationId,
+          }).from(passengers).where(eq(passengers.bookingId, current.id));
           const restore = (id: number, front: number) => tx.execute(sql`
             UPDATE departures SET seatsSold = GREATEST(seatsSold - ${current.passengerCount}, 0),
               frontSeatsSold = GREATEST(frontSeatsSold - ${front}, 0) WHERE id = ${id}`);
           await restore(current.outboundDepartureId, current.outboundFrontSeats);
+          await restoreSegmentInventoryInTransaction(tx, current.outboundDepartureId, itinerary, "outbound");
           if (current.returnDepartureId) await restore(current.returnDepartureId, current.returnFrontSeats);
+          if (current.returnDepartureId) await restoreSegmentInventoryInTransaction(tx, current.returnDepartureId, itinerary, "return");
           await tx.update(passengers).set({ departureId: null, seatNumber: null, outboundPickupLocationId: null, outboundDropoffLocationId: null, returnDepartureId: null, returnSeatNumber: null, returnPickupLocationId: null, returnDropoffLocationId: null })
             .where(eq(passengers.bookingId, current.id));
           await tx.update(tickets).set({ status: "voided" }).where(eq(tickets.bookingId, current.id));

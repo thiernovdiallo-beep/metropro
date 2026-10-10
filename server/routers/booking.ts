@@ -12,6 +12,7 @@ import { frontCount, legFareCents, seatFareCents, validateSeatSelections, type S
 import { getSettings } from "../services/policies";
 import { getSeatAvailability } from "../services/seat-inventory";
 import { validateNumberedSeats } from "../services/seat-selection";
+import { holdSegmentInventoryInTransaction, releaseSegmentInventoryInTransaction } from "../services/segment-inventory";
 import { reconcilePendingRefunds } from "../services/refund-lifecycle";
 import { throttleSeatMap } from "../services/seat-map-rate-limit";
 import { makeBookingNumber } from "../services/tickets";
@@ -288,7 +289,9 @@ export const bookingRouter = router({
           }
           try {
             await holdSeatsInTransaction(tx, outbound.id, input.passengerCount, outFront);
+            await holdSegmentInventoryInTransaction(tx, outbound.id, input.passengers, "outbound");
             if (ret) await holdSeatsInTransaction(tx, ret.id, input.passengerCount, retFront);
+            if (ret) await holdSegmentInventoryInTransaction(tx, ret.id, input.passengers, "return");
           } catch (error) {
             throw new TRPCError({ code: "CONFLICT", message: error instanceof Error ? error.message : "Selected seats are sold out" });
           }
@@ -375,7 +378,9 @@ export const bookingRouter = router({
             const [current] = await tx.select().from(bookings).where(eq(bookings.id, bookingId!)).limit(1).for("update");
             if (!current || current.status !== "pending_payment") return;
             await releaseHoldsInTransaction(tx, outbound.id, input.passengerCount, outFront);
+            await releaseSegmentInventoryInTransaction(tx, outbound.id, input.passengers, "outbound");
             if (ret) await releaseHoldsInTransaction(tx, ret.id, input.passengerCount, retFront);
+            if (ret) await releaseSegmentInventoryInTransaction(tx, ret.id, input.passengers, "return");
             await tx.update(passengers).set({ departureId: null, seatNumber: null, outboundPickupLocationId: null, outboundDropoffLocationId: null, returnDepartureId: null, returnSeatNumber: null, returnPickupLocationId: null, returnDropoffLocationId: null })
               .where(eq(passengers.bookingId, current.id));
             await tx.update(bookings).set({ status: "canceled", holdExpiresAt: null }).where(eq(bookings.id, current.id));

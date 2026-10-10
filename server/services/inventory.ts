@@ -2,6 +2,7 @@ import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { bookings, departures, passengers, payments, vehicles } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { affectedRows } from "../lib/mysql";
+import { releaseSegmentInventoryInTransaction } from "./segment-inventory";
 
 const BOOKABLE = ["scheduled", "boarding", "delayed"] as const;
 
@@ -147,6 +148,12 @@ export async function expireStaleHolds(now = new Date()) {
       const [current] = await tx.select().from(bookings).where(eq(bookings.id, booking.id)).limit(1).for("update");
       if (!current || current.status !== "pending_payment" || !current.holdExpiresAt || current.holdExpiresAt > now) return false;
       await lockDepartureInventory(tx, [current.outboundDepartureId, current.returnDepartureId]);
+      const itinerary = await tx.select({
+        outboundPickupLocationId: passengers.outboundPickupLocationId,
+        outboundDropoffLocationId: passengers.outboundDropoffLocationId,
+        returnPickupLocationId: passengers.returnPickupLocationId,
+        returnDropoffLocationId: passengers.returnDropoffLocationId,
+      }).from(passengers).where(eq(passengers.bookingId, current.id));
       const release = async (departureId: number, count: number, frontCount: number) => {
         await tx.execute(sql`
           UPDATE departures SET seatsHeld = GREATEST(seatsHeld - ${count}, 0),
@@ -155,7 +162,9 @@ export async function expireStaleHolds(now = new Date()) {
         `);
       };
       await release(current.outboundDepartureId, current.passengerCount, current.outboundFrontSeats);
+      await releaseSegmentInventoryInTransaction(tx, current.outboundDepartureId, itinerary, "outbound");
       if (current.returnDepartureId) await release(current.returnDepartureId, current.passengerCount, current.returnFrontSeats);
+      if (current.returnDepartureId) await releaseSegmentInventoryInTransaction(tx, current.returnDepartureId, itinerary, "return");
       await tx.update(passengers).set({ departureId: null, seatNumber: null, outboundPickupLocationId: null, outboundDropoffLocationId: null, returnDepartureId: null, returnSeatNumber: null, returnPickupLocationId: null, returnDropoffLocationId: null })
         .where(eq(passengers.bookingId, current.id));
       await tx.update(bookings).set({ status: "canceled", holdExpiresAt: null }).where(eq(bookings.id, current.id));

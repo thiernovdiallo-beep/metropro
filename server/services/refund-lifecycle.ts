@@ -7,6 +7,7 @@ import { insertId } from "../lib/mysql";
 import { getStripe, stripeEnabled } from "../stripe/client";
 import { inventoryTransaction, lockDepartureInventory } from "./inventory";
 import { TEMPLATES, notify } from "./notifications";
+import { restoreSegmentInventoryInTransaction } from "./segment-inventory";
 
 export type RefundStatus = "pending" | "succeeded" | "failed";
 export function normalizedRefundStatus(status: string | null): RefundStatus {
@@ -54,11 +55,19 @@ export async function beginBookingRefund(opts: {
       throw new TRPCError({ code: "BAD_REQUEST", message: "A successful ticket charge is required before refunding" });
     }
     await lockDepartureInventory(tx, [booking.outboundDepartureId, booking.returnDepartureId]);
+    const itinerary = await tx.select({
+      outboundPickupLocationId: passengers.outboundPickupLocationId,
+      outboundDropoffLocationId: passengers.outboundDropoffLocationId,
+      returnPickupLocationId: passengers.returnPickupLocationId,
+      returnDropoffLocationId: passengers.returnDropoffLocationId,
+    }).from(passengers).where(eq(passengers.bookingId, booking.id));
     const restore = (id: number, front: number) => tx.execute(sql`
       UPDATE departures SET seatsSold = GREATEST(seatsSold - ${booking.passengerCount}, 0),
         frontSeatsSold = GREATEST(frontSeatsSold - ${front}, 0) WHERE id = ${id}`);
     await restore(booking.outboundDepartureId, booking.outboundFrontSeats);
+    await restoreSegmentInventoryInTransaction(tx, booking.outboundDepartureId, itinerary, "outbound");
     if (booking.returnDepartureId) await restore(booking.returnDepartureId, booking.returnFrontSeats);
+    if (booking.returnDepartureId) await restoreSegmentInventoryInTransaction(tx, booking.returnDepartureId, itinerary, "return");
     await tx.update(passengers).set({ departureId: null, seatNumber: null, outboundPickupLocationId: null, outboundDropoffLocationId: null, returnDepartureId: null, returnSeatNumber: null, returnPickupLocationId: null, returnDropoffLocationId: null })
       .where(eq(passengers.bookingId, booking.id));
     await tx.update(tickets).set({ status: "voided" }).where(eq(tickets.bookingId, booking.id));

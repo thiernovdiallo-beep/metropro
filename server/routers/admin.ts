@@ -34,6 +34,7 @@ import { analyticsDateRange, getAnalytics, getOpsKpis } from "../services/analyt
 import { adminBookingDetail, adminPayments, adminSupportTickets, searchAdminBookings } from "../services/admin-operations";
 import { changesBookedItinerary } from "../services/route-safety";
 import { rescheduleWithNumberedSeats } from "../services/rescheduling";
+import { ensureDepartureSegments } from "../services/segment-inventory";
 import { beginBookingRefund, reconcilePendingRefunds, submitRefundIntent } from "../services/refund-lifecycle";
 import { assertDriverAssignable, assertVehicleAssignable } from "../services/dispatch";
 import { planVehicleCapacityRetune } from "../services/vehicle-capacity";
@@ -686,17 +687,20 @@ export const adminRouter = router({
       try { await assertDriverAssignable(input.driverId, departAt, arriveAt); }
       catch (error) { throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Driver unavailable" }); }
       const settings = await getSettings();
-      await db.insert(departures).values({
-        routeId: input.routeId,
-        vehicleId: input.vehicleId,
-        driverId: input.driverId,
-        departAt,
-        arriveAt,
-        capacity: vehicle.capacity,
-        memberEarlyAccessAt: new Date(
-          departAt.getTime() - settings.memberEarlyAccessHours * 60 * 60 * 1000
-        ),
-        status: "scheduled",
+      await db.transaction(async tx => {
+        const created = await tx.insert(departures).values({
+          routeId: input.routeId,
+          vehicleId: input.vehicleId,
+          driverId: input.driverId,
+          departAt,
+          arriveAt,
+          capacity: vehicle.capacity,
+          memberEarlyAccessAt: new Date(
+            departAt.getTime() - settings.memberEarlyAccessHours * 60 * 60 * 1000
+          ),
+          status: "scheduled",
+        });
+        await ensureDepartureSegments(tx, insertId(created));
       });
       await writeAudit(ctx.user.id, "departure.create", "departure", input.routeId);
       return { ok: true };
