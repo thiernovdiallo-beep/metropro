@@ -178,7 +178,7 @@ export function MapView({
       const isIntermediateStop = markerData.type === "stop";
       element.className = isIntermediateStop
         ? "group relative flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#4A90B8] bg-[#EAF2F1] text-sm font-bold text-[#3A7CA5] shadow-lg transition-transform duration-200 hover:scale-125 focus:outline-none focus:ring-2 focus:ring-[#4A90B8]"
-        : "group relative flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#16A34A] bg-white text-sm font-bold text-[#0F172A] shadow-lg transition-transform duration-200 hover:scale-125 focus:outline-none focus:ring-2 focus:ring-[#0891B2]";
+        : "group relative flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#15803D] bg-white text-sm font-bold text-[#0F172A] shadow-lg transition-transform duration-200 hover:scale-125 focus:outline-none focus:ring-2 focus:ring-[#0D2B55]";
       element.textContent = code;
       element.setAttribute("aria-label", `${code} ${markerData.label}${isIntermediateStop ? ", intermediate stop" : ""}`);
       element.title = `${code} · ${markerData.label}${isIntermediateStop ? " · Intermediate stop" : ""}`;
@@ -195,8 +195,8 @@ export function MapView({
         content: element,
       });
       marker.addListener("click", () => {
-        markerRefs.current.forEach(({ element: other }) => other.classList.remove("scale-125", "bg-[#16A34A]", "text-white"));
-        element.classList.add("scale-125", "bg-[#16A34A]", "text-white");
+        markerRefs.current.forEach(({ element: other }) => other.classList.remove("scale-125", "bg-[#15803D]", "text-white"));
+        element.classList.add("scale-125", "bg-[#15803D]", "text-white");
         const detail = [
           `<strong>${escapeHtml(code)} · ${escapeHtml(markerData.label)}</strong>`,
           isIntermediateStop ? "<div>Intermediate stop</div>" : "",

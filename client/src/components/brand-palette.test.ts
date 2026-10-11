@@ -7,28 +7,28 @@ const tokens = Object.fromEntries(
     .map(([, name, value]) => [name, value.toUpperCase()])
 );
 
-describe("Metro Pro visual identity", () => {
-  it("retains the MetroPro calm green-teal theme", () => {
+describe("MetroPro Transit Corp. visual identity", () => {
+  it("uses the official navy, orange-red, and light UI theme", () => {
     expect(tokens).toMatchObject({
-      "--metro-ink": "#0F172A",
-      "--primary": "#16A34A",
-      "--metro-blue": "#0891B2",
-      "--metro-blue-dark": "#0E7490",
-      "--metro-green": "#16A34A",
-      "--accent": "#0891B2",
-      "--background": "#F8FAFC",
+      "--metro-ink": "#172033",
+      "--primary": "#F04424",
+      "--metro-blue": "#0D2B55",
+      "--metro-blue-dark": "#092044",
+      "--metro-green": "#15803D",
+      "--accent": "#0D2B55",
+      "--background": "#F3F5F8",
       "--card": "#FFFFFF",
-      "--foreground": "#0F172A",
+      "--foreground": "#172033",
       "--muted-foreground": "#64748B",
       "--border": "#E2E8F0",
-      "--metro-success": "#16A34A",
+      "--metro-success": "#15803D",
       "--metro-warning": "#F59E0B",
       "--metro-error": "#DC2626",
     });
   });
 
-  it("keeps available and selected seats green, with held seats amber", () => {
-    expect(tokens["--metro-selected"]).toBe(tokens["--metro-green"]);
+  it("keeps available seats green, selected seats navy, and held seats amber", () => {
+    expect(tokens["--metro-selected"]).toBe("#0D2B55");
     expect(stylesheet).toContain(".metro-seat--selected { border-color: var(--metro-selected)");
     expect(stylesheet).toContain(".metro-seat--available { border-color: var(--metro-green)");
     expect(stylesheet).toContain(".metro-seat--held { border-color: var(--metro-warning)");

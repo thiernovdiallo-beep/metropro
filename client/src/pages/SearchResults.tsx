@@ -146,13 +146,13 @@ export default function SearchResults() {
         </Suspense>
         <div className="mt-4 flex flex-wrap items-center gap-2 px-2 sm:px-3" aria-label="Route sequence">
           {mapMarkers.map((marker, index) => <span key={`${marker.type}-${marker.label}`} className="inline-flex items-center gap-2 rounded-full border border-[#DDE4E0] bg-white px-3 py-1.5 text-xs font-semibold text-[#2D3E40]">
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#16A34A] text-[10px] font-bold text-white">{marker.type === "origin" ? "A" : marker.type === "destination" ? "D" : index}</span>
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#15803D] text-[10px] font-bold text-white">{marker.type === "origin" ? "A" : marker.type === "destination" ? "D" : index}</span>
             {marker.label}
           </span>)}
         </div>
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 px-2 text-xs text-muted-foreground sm:px-3" aria-label="Route map legend">
           <span><strong className="text-[#2D3E40]">A</strong> Origin</span>
-          <span><strong className="text-[#16A34A]">1, 2…</strong> Stops</span>
+          <span><strong className="text-[#15803D]">1, 2…</strong> Stops</span>
           <span><strong className="text-[#2D3E40]">D</strong> Destination</span>
           <span><strong className="text-[#111827]">━</strong> Route</span>
         </div>
