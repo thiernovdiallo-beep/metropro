@@ -102,10 +102,6 @@ export function SiteFooter() {
     <div className="border-t border-border"><div className="container flex flex-wrap items-center justify-between gap-x-5 gap-y-1 py-4 text-xs text-muted-foreground">
       <span>© 2026 MetroPro Transit Corp.</span><span><a href="/terms" className="underline underline-offset-4 hover:text-primary">Terms</a> · <a href="/privacy" className="underline underline-offset-4 hover:text-primary">Privacy</a></span>
     </div></div>
-    <div className="border-t border-border"><div className="container flex justify-end gap-6">
-      <Link href="/driver/login" className="inline-flex min-h-11 items-center text-xs text-muted-foreground underline-offset-4 hover:text-primary hover:underline">Driver sign in</Link>
-      <Link href="/admin/login" className="inline-flex min-h-11 items-center text-xs text-muted-foreground underline-offset-4 hover:text-primary hover:underline">Admin sign in</Link>
-    </div></div>
   </footer>;
 }
 
