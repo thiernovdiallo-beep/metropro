@@ -177,14 +177,14 @@ export function MapView({
       const code = markerCode(markerData, index);
       const isIntermediateStop = markerData.type === "stop";
       element.className = isIntermediateStop
-        ? "group relative flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#4A90B8] bg-[#EAF2F1] text-sm font-bold text-[#3A7CA5] shadow-lg transition-transform duration-200 hover:scale-125 focus:outline-none focus:ring-2 focus:ring-[#4A90B8]"
-        : "group relative flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#15803D] bg-white text-sm font-bold text-[#0F172A] shadow-lg transition-transform duration-200 hover:scale-125 focus:outline-none focus:ring-2 focus:ring-[#0D2B55]";
+        ? "group relative flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#3D5A7A] bg-[#E7EEF5] text-sm font-bold text-[#0B2B55] shadow-lg transition-transform duration-200 hover:scale-125 focus:outline-none focus:ring-2 focus:ring-[#3D5A7A]"
+        : "group relative flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#0B2B55] bg-white text-sm font-bold text-[#071D3B] shadow-lg transition-transform duration-200 hover:scale-125 focus:outline-none focus:ring-2 focus:ring-[#0B2B55]";
       element.textContent = code;
       element.setAttribute("aria-label", `${code} ${markerData.label}${isIntermediateStop ? ", intermediate stop" : ""}`);
       element.title = `${code} · ${markerData.label}${isIntermediateStop ? " · Intermediate stop" : ""}`;
       if (isIntermediateStop) {
         const tooltip = document.createElement("span");
-        tooltip.className = "pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-[#2D3E40] px-2 py-1 text-xs font-medium text-white shadow-md group-hover:block group-focus-visible:block";
+        tooltip.className = "pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-[#0B2B55] px-2 py-1 text-xs font-medium text-white shadow-md group-hover:block group-focus-visible:block";
         tooltip.textContent = `${code} · ${markerData.label}`;
         element.appendChild(tooltip);
       }
@@ -195,8 +195,8 @@ export function MapView({
         content: element,
       });
       marker.addListener("click", () => {
-        markerRefs.current.forEach(({ element: other }) => other.classList.remove("scale-125", "bg-[#15803D]", "text-white"));
-        element.classList.add("scale-125", "bg-[#15803D]", "text-white");
+        markerRefs.current.forEach(({ element: other }) => other.classList.remove("scale-125", "bg-[#0B2B55]", "text-white"));
+        element.classList.add("scale-125", "bg-[#0B2B55]", "text-white");
         const detail = [
           `<strong>${escapeHtml(code)} · ${escapeHtml(markerData.label)}</strong>`,
           isIntermediateStop ? "<div>Intermediate stop</div>" : "",
@@ -242,7 +242,7 @@ export function MapView({
         map: mapInstance,
         path,
         geodesic: false,
-        strokeColor: "#111827",
+        strokeColor: "#071D3B",
         strokeOpacity: 0.95,
         strokeWeight: 6,
         clickable: false,

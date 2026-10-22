@@ -79,7 +79,7 @@ export function BookingProgress({ current }: { current: BookingStep }) {
     <ol className="flex min-w-max items-center gap-2 text-xs font-semibold sm:gap-3">
       {bookingSteps.map((step, index) => <li key={step} aria-current={index === currentIndex ? "step" : undefined}
         className={cn("flex items-center gap-2 rounded-full border px-3 py-2.5", index < currentIndex ? "border-primary/30 bg-secondary text-primary"
-          : index === currentIndex ? "border-[var(--metro-green)] bg-[var(--metro-green)] text-white" : "border-border bg-white text-muted-foreground")}>
+          : index === currentIndex ? "border-[var(--metro-available)] bg-[var(--metro-available)] text-white" : "border-border bg-white text-muted-foreground")}>
         <span aria-hidden="true">{index + 1}</span>{step}
       </li>)}
     </ol>

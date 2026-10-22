@@ -8,31 +8,31 @@ const tokens = Object.fromEntries(
 );
 
 describe("MetroPro Transit Corp. visual identity", () => {
-  it("uses the official navy, orange-red, and light UI theme", () => {
+  it("uses the official MetroPro navy, orange-red, and white palette", () => {
     expect(tokens).toMatchObject({
-      "--metro-ink": "#172033",
-      "--primary": "#F04424",
-      "--metro-blue": "#0D2B55",
-      "--metro-blue-dark": "#092044",
-      "--metro-green": "#15803D",
-      "--accent": "#0D2B55",
-      "--background": "#F3F5F8",
+      "--metro-ink": "#0B2B55",
+      "--metro-navy": "#0B2B55",
+      "--metro-navy-dark": "#071D3B",
+      "--metro-orange": "#EF4B23",
+      "--primary": "#EF4B23",
+      "--accent": "#0B2B55",
+      "--background": "#F6F8FB",
       "--card": "#FFFFFF",
-      "--foreground": "#172033",
-      "--muted-foreground": "#64748B",
-      "--border": "#E2E8F0",
-      "--metro-success": "#15803D",
-      "--metro-warning": "#F59E0B",
-      "--metro-error": "#DC2626",
+      "--foreground": "#0B2B55",
+      "--muted-foreground": "#52677F",
+      "--border": "#D4DDE8",
+      "--metro-success": "#0B2B55",
+      "--metro-warning": "#D7652B",
+      "--metro-error": "#B52F16",
     });
   });
 
-  it("keeps available seats green, selected seats navy, and held seats amber", () => {
-    expect(tokens["--metro-selected"]).toBe("#0D2B55");
+  it("keeps available and selected seats navy, with orange-red action states", () => {
+    expect(tokens["--metro-selected"]).toBe("#0B2B55");
     expect(stylesheet).toContain(".metro-seat--selected { border-color: var(--metro-selected)");
-    expect(stylesheet).toContain(".metro-seat--available { border-color: var(--metro-green)");
+    expect(stylesheet).toContain(".metro-seat--available { border-color: var(--metro-available)");
     expect(stylesheet).toContain(".metro-seat--held { border-color: var(--metro-warning)");
-    expect(stylesheet).toContain(".metro-seat--taken { border-color: #94A3B8");
+    expect(stylesheet).toContain(".metro-seat--taken { border-color: #7C8EA5");
     expect(stylesheet).toContain(".metro-status--success { border-color: var(--metro-success)");
     expect(stylesheet).toContain(".metro-status--pending { border-color: var(--metro-warning)");
     expect(stylesheet).toContain(".metro-status--error { border-color: var(--metro-error)");
