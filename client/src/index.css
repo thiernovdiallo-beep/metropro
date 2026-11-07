@@ -202,8 +202,8 @@
   .metro-action-link--primary { border-color: transparent; background: linear-gradient(110deg, #EF4B23 0%, #EF4B23 58%, #0B2B55 100%); background-position: 0% 0; background-size: 220% 100%; color: white; transition: background-position 300ms ease, box-shadow 200ms ease, transform 150ms ease; }
   .metro-action-link--primary:hover { border-color: transparent; background-position: 100% 0; color: white; box-shadow: 0 10px 22px -12px rgba(239, 75, 35, 0.35); transform: translateY(-1px); }
   .metro-action-link--primary:active { background-position: 75% 0; }
-  .metro-header-action { background: #EF4B23; background-size: 180% 100%; }
-  .metro-header-action:hover { background: #C13B1B; background-position: 100% 0; box-shadow: 0 8px 18px -12px rgba(239, 75, 35, 0.45); transform: translateY(-1px); }
+  .metro-header-action { border-color: transparent; background: #DC2626; color: white; background-size: 180% 100%; }
+  .metro-header-action:hover { border-color: transparent; background: #B91C1C; background-position: 100% 0; color: white; box-shadow: 0 8px 18px -12px rgba(220, 38, 38, 0.45); transform: translateY(-1px); }
   .metro-header-action:active { animation: none; transform: none; }
   .metro-action-link { display: inline-flex; min-height: var(--metro-control-height); align-items: center; justify-content: center; gap: 0.5rem; border: 1px solid var(--metro-line); border-radius: 0.75rem; background: white; padding: 0.6rem 1rem; color: var(--metro-ink); font-size: 0.875rem; font-weight: 600; text-decoration: none; transition: background-color 150ms, border-color 150ms, color 150ms; }
   .metro-action-link:hover { border-color: var(--primary); background: var(--secondary); color: var(--primary); }
