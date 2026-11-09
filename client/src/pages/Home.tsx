@@ -147,7 +147,7 @@ export default function Home() {
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,23,42,0.42)_0%,rgba(8,145,178,0.26)_47%,rgba(22,163,74,0.12)_100%)]" />
         <div className="container relative flex h-full items-start pt-9 sm:pt-16 lg:pt-28">
           <div className="max-w-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.23em] text-[#E7EEF5]">Travel with Metro Pro</p>
+            <p className="text-xs font-bold uppercase tracking-[0.23em] text-[#E7EEF5]">Travel with MetroPro</p>
             <h1 id="home-hero-title" className="mt-4 max-w-xl font-serif text-[2.3rem] leading-[1.08] tracking-tight sm:text-5xl lg:text-[3.75rem]">Travel comfortably.<br />Arrive confidently.</h1>
             <p className="mt-4 max-w-md text-base leading-relaxed text-white/90 sm:text-lg">Safe, comfortable and reliable journeys to your destination.</p>
             <p className="mt-4 text-sm font-medium text-white/80">New York City ↔ Columbus, Ohio</p>
