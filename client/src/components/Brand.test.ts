@@ -36,8 +36,8 @@ describe("Metro Pro global header", () => {
     const activeLinks = [...desktopNav!.matchAll(/<a[^>]*aria-current="page"[^>]*>([\s\S]*?)<\/a>/g)];
     expect(activeLinks).toHaveLength(1);
     expect(activeLinks[0][1]).toContain("Home");
-    expect(activeLinks[0][1]).toContain("border-[#F04424]");
-    expect(desktopNav).toContain("border-transparent group-hover:border-[#F04424]");
+    expect(activeLinks[0][1]).toContain("border-[#EF4B23]");
+    expect(desktopNav).toContain("border-transparent group-hover:border-[#EF4B23]");
     expect(html).toContain("container flex min-h-16 items-center justify-between gap-3 py-2 lg:grid lg:min-h-20 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]");
     expect(html).toContain("/metropro-transit-corp.png");
     expect(html).toContain('alt="MetroPro Transit Corp."');

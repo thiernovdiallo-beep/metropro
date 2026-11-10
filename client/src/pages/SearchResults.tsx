@@ -145,16 +145,16 @@ export default function SearchResults() {
           <LazyMapView markers={mapMarkers} initialZoom={7} className="rounded-xl" />
         </Suspense>
         <div className="mt-4 flex flex-wrap items-center gap-2 px-2 sm:px-3" aria-label="Route sequence">
-          {mapMarkers.map((marker, index) => <span key={`${marker.type}-${marker.label}`} className="inline-flex items-center gap-2 rounded-full border border-[#DDE4E0] bg-white px-3 py-1.5 text-xs font-semibold text-[#2D3E40]">
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#15803D] text-[10px] font-bold text-white">{marker.type === "origin" ? "A" : marker.type === "destination" ? "D" : index}</span>
+          {mapMarkers.map((marker, index) => <span key={`${marker.type}-${marker.label}`} className="inline-flex items-center gap-2 rounded-full border border-[#D4DDE8] bg-white px-3 py-1.5 text-xs font-semibold text-[#0B2B55]">
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#0B2B55] text-[10px] font-bold text-white">{marker.type === "origin" ? "A" : marker.type === "destination" ? "D" : index}</span>
             {marker.label}
           </span>)}
         </div>
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 px-2 text-xs text-muted-foreground sm:px-3" aria-label="Route map legend">
-          <span><strong className="text-[#2D3E40]">A</strong> Origin</span>
-          <span><strong className="text-[#15803D]">1, 2…</strong> Stops</span>
-          <span><strong className="text-[#2D3E40]">D</strong> Destination</span>
-          <span><strong className="text-[#111827]">━</strong> Route</span>
+          <span><strong className="text-[#0B2B55]">A</strong> Origin</span>
+          <span><strong className="text-[#0B2B55]">1, 2…</strong> Stops</span>
+          <span><strong className="text-[#0B2B55]">D</strong> Destination</span>
+          <span><strong className="text-[#071D3B]">━</strong> Route</span>
         </div>
       </section> : null}
       <ResultLeg label="Outbound" date={date} data={outbound.data} loading={outbound.isLoading} error={outbound.error?.message} retry={() => void outbound.refetch()} selectedId={outId} pax={pax} onSelect={id => { setOutId(id); setInId(null); if (type === "one_way") chooseTrip(id, null); }} direct={type === "one_way"} onModify={() => setEditing(true)} />

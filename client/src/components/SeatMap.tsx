@@ -38,11 +38,11 @@ const legend: { label: string; status: SeatStatus }[] = [
 // The reference uses colored chair silhouettes rather than large fare cards. Its
 // "business" category is not offered by Metro Pro, so the live legend stays truthful.
 const diagramLegend = [
-  { label: "Front", swatch: "bg-amber-500" },
-  { label: "Regular", swatch: "bg-[var(--metro-green)]" },
-  { label: "Booked", swatch: "bg-gray-400" },
+  { label: "Front", swatch: "bg-[#EF4B23]" },
+  { label: "Regular", swatch: "bg-[var(--metro-available)]" },
+  { label: "Booked", swatch: "bg-[#7C8EA5]" },
   { label: "Held", swatch: "bg-[var(--metro-warning)]" },
-  { label: "Selected", swatch: "bg-[var(--metro-green)] ring-2 ring-green-200" },
+  { label: "Selected", swatch: "bg-[var(--metro-available)] ring-2 ring-[#E7EEF5]" },
 ];
 
 function ChairGlyph() {

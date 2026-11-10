@@ -43,11 +43,11 @@ export function SiteHeader() {
     document.getElementById("member-sign-in")?.scrollIntoView({ block: "start", behavior: "smooth" });
     document.getElementById("member-login-email")?.focus();
   };
-  const navClass = (active: boolean) => `inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F04424] ${active ? "bg-[#FFF1ED] text-[#0D2B55]" : "text-[#64748B] hover:bg-[#F3F5F8] hover:text-[#F04424]"}`;
+  const navClass = (active: boolean) => `inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#EF4B23] ${active ? "bg-[#FFF0EC] text-[#0B2B55]" : "text-[#52677F] hover:bg-[#F6F8FB] hover:text-[#EF4B23]"}`;
   const renderLink = (item: NavItem, mobile = false) => <a key={`${mobile ? "mobile" : "desktop"}-${item.label}`} href={item.href}
     aria-current={item.active ? "page" : undefined} onClick={mobile ? () => setMobileOpen(false) : undefined}
     className={`${navClass(false)} group ${mobile ? "w-full" : ""}`}>
-    <span className={`inline-flex border-b-2 pb-1 transition-colors duration-200 motion-reduce:transition-none ${item.active ? "border-[#F04424] text-[#0D2B55]" : "border-transparent group-hover:border-[#F04424] group-hover:text-[#F04424]"}`}>
+    <span className={`inline-flex border-b-2 pb-1 transition-colors duration-200 motion-reduce:transition-none ${item.active ? "border-[#EF4B23] text-[#0B2B55]" : "border-transparent group-hover:border-[#EF4B23] group-hover:text-[#EF4B23]"}`}>
       {item.label}
     </span>
   </a>;
@@ -55,7 +55,7 @@ export function SiteHeader() {
     ? <Button type="button" variant="outline" onClick={() => logout()}>Sign out</Button>
     : <button type="button" onClick={memberEntry} className={navClass(false)}>Sign In</button>;
 
-  return <header className="metro-site-header relative z-40 border-b border-[#E2E8F0] bg-white text-[#172033]">
+  return <header className="metro-site-header relative z-40 border-b border-[#D4DDE8] bg-white text-[#0B2B55]">
     <div className="container flex min-h-16 items-center justify-between gap-3 py-2 lg:grid lg:min-h-20 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
       <Link href="/" className="shrink-0 no-underline focus-visible:rounded-xl" aria-label="MetroPro Transit Corp. home"><Wordmark /></Link>
       <nav className="hidden items-center gap-1 lg:flex lg:justify-self-center" aria-label="Main navigation">
@@ -65,13 +65,13 @@ export function SiteHeader() {
         {authAction}
         <a href="/#trip-search" className="metro-action-link metro-header-action min-h-11 px-5 text-sm font-bold uppercase tracking-wide">Book Now</a>
       </div>
-      <button type="button" className="ml-auto inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#E2E8F0] text-[#0D2B55] hover:bg-[#FFF1ED] lg:hidden"
+      <button type="button" className="ml-auto inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#D4DDE8] text-[#0B2B55] hover:bg-[#FFF0EC] lg:hidden"
         aria-label={mobileOpen ? "Close navigation" : "Open navigation"} aria-controls="metro-mobile-navigation" aria-expanded={mobileOpen}
         onClick={() => setMobileOpen(!mobileOpen)}>
         {mobileOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
       </button>
     </div>
-    {mobileOpen ? <nav id="metro-mobile-navigation" className="border-t border-[#E2E8F0] bg-[#F3F5F8] px-4 py-3 shadow-lg lg:hidden" aria-label="Mobile navigation">
+    {mobileOpen ? <nav id="metro-mobile-navigation" className="border-t border-[#D4DDE8] bg-[#F6F8FB] px-4 py-3 shadow-lg lg:hidden" aria-label="Mobile navigation">
       <div className="container flex flex-col gap-1 px-0 sm:px-0">{links.map(item => renderLink(item, true))}
         <div className="pt-1">{authAction}</div>
         <a href="/#trip-search" onClick={() => setMobileOpen(false)} className="metro-action-link metro-header-action mt-1 w-full min-h-12 font-bold uppercase tracking-wide">Book Now</a>
@@ -101,10 +101,6 @@ export function SiteFooter() {
     </div>
     <div className="border-t border-border"><div className="container flex flex-wrap items-center justify-between gap-x-5 gap-y-1 py-4 text-xs text-muted-foreground">
       <span>© 2026 MetroPro Transit Corp.</span><span><a href="/terms" className="underline underline-offset-4 hover:text-primary">Terms</a> · <a href="/privacy" className="underline underline-offset-4 hover:text-primary">Privacy</a></span>
-    </div></div>
-    <div className="border-t border-border"><div className="container flex justify-end gap-6">
-      <Link href="/driver/login" className="inline-flex min-h-11 items-center text-xs text-muted-foreground underline-offset-4 hover:text-primary hover:underline">Driver sign in</Link>
-      <Link href="/admin/login" className="inline-flex min-h-11 items-center text-xs text-muted-foreground underline-offset-4 hover:text-primary hover:underline">Admin sign in</Link>
     </div></div>
   </footer>;
 }

@@ -50,7 +50,7 @@ export default function AdminSetup() {
           <div className="ticket-card p-5 sm:p-7">
           {!token ? (
             <StatusNotice tone="error">
-              Open the complete private link from the Manus project-owner notification. It expires after 24 hours and works only once.
+              Open the complete private link from the project-owner notification. It expires after 24 hours and works only once.
             </StatusNotice>
           ) : (
             <form onSubmit={submit} className="grid gap-4">
