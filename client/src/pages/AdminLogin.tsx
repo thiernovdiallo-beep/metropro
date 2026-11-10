@@ -45,7 +45,7 @@ export default function AdminLogin() {
     }
   }
 
-  async function continueWithOrganizationSignIn() {
+  async function continueWithManus() {
     setError("");
     setOauthWorking(true);
     try {
@@ -61,7 +61,7 @@ export default function AdminLogin() {
       startLogin();
     } catch (cause) {
       sessionStorage.removeItem(ADMIN_LOGIN_INTENT_KEY);
-      setError(cause instanceof Error ? cause.message : "Could not start organization sign-in.");
+      setError(cause instanceof Error ? cause.message : "Could not start Manus sign-in.");
       setOauthWorking(false);
     }
   }
@@ -99,9 +99,9 @@ export default function AdminLogin() {
             </Button>
           </form>
           {!isPreview ? (
-            <button type="button" disabled={oauthWorking} onClick={continueWithOrganizationSignIn}
+            <button type="button" disabled={oauthWorking} onClick={continueWithManus}
               className="mt-5 inline-flex min-h-11 items-center text-sm text-muted-foreground underline underline-offset-4 hover:text-primary">
-              {oauthWorking ? "Opening organization sign-in…" : "Use organization sign-in instead"}
+              {oauthWorking ? "Opening Manus sign-in…" : "Use an existing Manus admin session instead"}
             </button>
           ) : null}
                     </div>
